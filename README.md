@@ -55,7 +55,7 @@ Before building Android version the SDK and NDK have to be installed. See androi
 
 Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s is hardcoded and cannot be changed.
 
-samples2.bin is a "life" example with two devices received.
+samples2.bin is a "live" example with two devices received.
 
 On Android first the driver must be started with options given above. IQ-data goes to a port which is would be already set by driver settings. Use get_net to get IQ-data into rtl_wmbus.
 
