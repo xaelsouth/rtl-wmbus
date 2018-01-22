@@ -16,10 +16,10 @@ $(OUTDIR):
 	$(MKDIR) -p "$(OUTDIR)"
 
 release: $(OUTDIR)
-	$(CC) -msse4.2 -DNDEBUG -O3                  $(CFLAGS) $(CFLAGS_WARNINGS) -o $(OUTFILE) $(SRC) $(LIB)
+	$(CC) -DNDEBUG -O3                  $(CFLAGS) $(CFLAGS_WARNINGS) -o $(OUTFILE) $(SRC) $(LIB)
 
 debug: $(OUTDIR)
-	$(CC) -msse4.2 -DDEBUG  -O0 -g3 -ggdb -p -pg $(CFLAGS) $(CFLAGS_WARNINGS) -o $(OUTFILE) $(SRC) $(LIB)
+	$(CC) -DDEBUG  -O0 -g3 -ggdb -p -pg $(CFLAGS) $(CFLAGS_WARNINGS) -o $(OUTFILE) $(SRC) $(LIB)
 
 # Will build on Raspberry Pi 1 only
 pi1:
