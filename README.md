@@ -9,7 +9,7 @@ The primary purpose of rtl-wmbus is experimenting with digital signal processing
 rtl-wmbus provides:
  * filtering
  * FSK demodulating
- * clock recovery
+ * clock recovering
  * mode T1 and mode C1 packet decoding
 
 rtl-wmbus requires:
