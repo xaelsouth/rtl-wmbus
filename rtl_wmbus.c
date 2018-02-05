@@ -39,7 +39,7 @@
 #include "t1_c1_packet_decoder.h"
 
 
-#if !defined(__ANDROID__)
+#if defined(__SSE4_2__)
 #include <immintrin.h>
 #endif
 
