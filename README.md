@@ -40,14 +40,14 @@ Before building Android version the SDK and NDK have to be installed. See androi
 
    Usage
    -----
- To save IQ-stream on disk and decode them off-line:
+ To save an IQ-stream on disk and decode that off-line:
 
- * rtl_sdr samples.bin -f 868.9M -s 1600000
+ * rtl_sdr samples.bin -f 868.95M -s 1600000
  * cat samples.bin | build/rtl_wmbus
 
  To run continuously:
 
- * rtl_sdr -f 868.9M -s 1600000 - 2>/dev/null | build/rtl_wmbus
+ * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
 
  To count "good" (no 3 out of 6 errors, no checksum errors) packets:
 
@@ -59,6 +59,11 @@ samples2.bin is a "live" example with two devices received.
 
 On Android first the driver must be started with options given above. IQ-data goes to a port which is would be already set by driver settings. Use get_net to get IQ-data into rtl_wmbus.
 
+   Bugfixing
+   -----
+Mode C1 datagram type B is supported now - thanks to Fredrik Öhrström for spotting this bug and for providing raw datagram samples.
+An another thanks to Kjell Braden (afflux) and to carlos62 for the idea how to fix this.
+   
   License
   -------
 
