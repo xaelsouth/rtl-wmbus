@@ -435,7 +435,7 @@ static void c1_rx_last_lfield_bit(unsigned bit)
     t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l++] = t1_c1_packet_decoder_work.L;
     if (t1_c1_packet_decoder_work.b_frame_type)
     {
-        t1_c1_packet_decoder_work.L = get_mode_b_tlg_length(t1_c1_packet_decoder_work.L); 
+        t1_c1_packet_decoder_work.L = get_mode_b_tlg_length(t1_c1_packet_decoder_work.L);
     }
     else
     {
@@ -598,7 +598,7 @@ static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
         while (datalen)
         {
             /* The CRC field of Block 2 is calculated on the _concatenation_
-               of Block 1 and Block 2 data. */        
+               of Block 1 and Block 2 data. */
             if (datalen >= 128)
             {
                 memmove(dst, data, 126);
@@ -679,6 +679,7 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi)
             t1_c1_packet_decoder_work.L = cook_pkt(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L);
         }
         fprintf(stdout, "0x");
+        t1_c1_packet_decoder_work.packet[0] = t1_c1_packet_decoder_work.L;
         for (size_t l = 0; l < t1_c1_packet_decoder_work.L; l++) fprintf(stdout, "%02x", t1_c1_packet_decoder_work.packet[l]);
 #endif
 
@@ -699,4 +700,3 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi)
 }
 
 #endif /* T1_C1_PACKET_DECODER_H */
-
