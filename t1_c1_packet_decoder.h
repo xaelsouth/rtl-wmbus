@@ -679,7 +679,7 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi)
             t1_c1_packet_decoder_work.L = cook_pkt(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L);
         }
         fprintf(stdout, "0x");
-        t1_c1_packet_decoder_work.packet[0] = t1_c1_packet_decoder_work.L;
+        t1_c1_packet_decoder_work.packet[0] = t1_c1_packet_decoder_work.L - 1;
         for (size_t l = 0; l < t1_c1_packet_decoder_work.L; l++) fprintf(stdout, "%02x", t1_c1_packet_decoder_work.packet[l]);
 #endif
 
