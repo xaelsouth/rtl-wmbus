@@ -283,6 +283,7 @@ static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 static void done(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     (void)bit;
+    (void)decoder;
 }
 
 static void rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)

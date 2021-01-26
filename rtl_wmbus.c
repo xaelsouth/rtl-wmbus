@@ -365,7 +365,7 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
             return;
         }
 
-        const int unscaled_run_length = algo->run_length;
+        //const int unscaled_run_length = algo->run_length;
 
         algo->run_length *= 256; // resolution scaling up for fixed point calculation
 
