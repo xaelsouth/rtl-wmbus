@@ -246,7 +246,7 @@ struct t1_c1_packet_decoder_work
     unsigned L;
     unsigned mode;
     unsigned byte;
-    uint8_t packet[290]; // max. packet length with L- and all CRC-Fields
+    __attribute__((__aligned__(16))) uint8_t packet[290]; // max. packet length with L- and all CRC-Fields
     char timestamp[64];
 };
 
