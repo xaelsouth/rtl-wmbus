@@ -2,7 +2,7 @@
 #define T1_C1_PACKET_DECODER_H
 
 /*-
- * Copyright (c) 2017 <xael.south@yandex.com>
+ * Copyright (c) 2021 <xael.south@yandex.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -134,34 +134,35 @@ static const uint16_t CRC16_DNP_TABLE[] =
 };
 
 
-typedef void (*t1_c1_packet_decoder_state)(unsigned bit);
+struct t1_c1_packet_decoder_work;
+typedef void (*t1_c1_packet_decoder_state)(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void idle(unsigned bit);
-static void done(unsigned bit);
-static void rx_bit(unsigned bit);
+static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void done(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_high_nibble_first_lfield_bit(unsigned bit);
-static void rx_high_nibble_last_lfield_bit(unsigned bit);
+static void rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_low_nibble_first_lfield_bit(unsigned bit);
-static void rx_low_nibble_last_lfield_bit(unsigned bit);
+static void rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_high_nibble_first_data_bit(unsigned bit);
-static void rx_high_nibble_last_data_bit(unsigned bit);
+static void rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_low_nibble_first_data_bit(unsigned bit);
-static void rx_low_nibble_last_data_bit(unsigned bit);
+static void rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void c1_rx_bit(unsigned bit);
+static void c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void c1_rx_first_mode_bit(unsigned bit);
-static void c1_rx_last_mode_bit(unsigned bit);
+static void c1_rx_first_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void c1_rx_last_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void c1_rx_first_lfield_bit(unsigned bit);
-static void c1_rx_last_lfield_bit(unsigned bit);
+static void c1_rx_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void c1_rx_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void c1_rx_first_data_bit(unsigned bit);
-static void c1_rx_last_data_bit(unsigned bit);
+static void c1_rx_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void c1_rx_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
 
 static const t1_c1_packet_decoder_state states[] =
@@ -225,7 +226,7 @@ static const t1_c1_packet_decoder_state states[] =
 };
 
 
-static struct
+struct t1_c1_packet_decoder_work
 {
     const t1_c1_packet_decoder_state *state;
     unsigned current_rssi;
@@ -247,7 +248,7 @@ static struct
     unsigned byte;
     uint8_t packet[290]; // max. packet length with L- and all CRC-Fields
     char timestamp[64];
-} t1_c1_packet_decoder_work = {.state = &states[0]}; // idle
+};
 
 int get_mode_a_tlg_length(uint8_t lfield)
 {
@@ -260,204 +261,131 @@ int get_mode_b_tlg_length(uint8_t lfield)
     return 1 + (int)lfield;
 }
 
-static void reset_t1_c1_packet_decoder(void)
+static int in_rx_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
 {
-    memset(&t1_c1_packet_decoder_work, 0, sizeof(t1_c1_packet_decoder_work));
-    t1_c1_packet_decoder_work.state = &states[0];
+    return (decoder->state == &states[0]) ? 0 : 1;
 }
 
-static void idle(unsigned bit)
+static void reset_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
+{
+    memset(decoder, 0, sizeof(*decoder));
+    decoder->state = &states[0];
+}
+
+static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     if (!(bit & PACKET_PREAMBLE_DETECTED_MASK))
     {
-        reset_t1_c1_packet_decoder();
+        reset_t1_c1_packet_decoder(decoder);
     }
 }
 
-static void done(unsigned bit)
+static void done(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     (void)bit;
 }
 
-static void rx_bit(unsigned bit)
+static void rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_high_nibble_first_lfield_bit(unsigned bit)
+static void rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
-    t1_c1_packet_decoder_work.packet_rssi = t1_c1_packet_decoder_work.current_rssi;
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
+    decoder->packet_rssi = decoder->current_rssi;
 }
 
-static void rx_high_nibble_last_lfield_bit(unsigned bit)
+static void rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-    t1_c1_packet_decoder_work.mode = t1_c1_packet_decoder_work.byte;
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+    decoder->mode = decoder->byte;
 
-    t1_c1_packet_decoder_work.L = HIGH_NIBBLE_3OUTOF6[t1_c1_packet_decoder_work.byte];
-    t1_c1_packet_decoder_work.flags = 0;
+    decoder->L = HIGH_NIBBLE_3OUTOF6[decoder->byte];
+    decoder->flags = 0;
 }
 
-static void rx_low_nibble_first_lfield_bit(unsigned bit)
+static void rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_low_nibble_last_lfield_bit(unsigned bit)
+static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-    t1_c1_packet_decoder_work.mode <<= 6;
-    t1_c1_packet_decoder_work.mode |= t1_c1_packet_decoder_work.byte;
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+    decoder->mode <<= 6;
+    decoder->mode |= decoder->byte;
 
-    const unsigned byte = LOW_NIBBLE_3OUTOF6[t1_c1_packet_decoder_work.byte];
+    const unsigned byte = LOW_NIBBLE_3OUTOF6[decoder->byte];
 
-    if (t1_c1_packet_decoder_work.L == 0xFFu || byte == 0xFFu)
+    if (decoder->L == 0xFFu || byte == 0xFFu)
     {
-        if (t1_c1_packet_decoder_work.mode == C1_MODE_A)
+        if (decoder->mode == C1_MODE_A)
         {
-            t1_c1_packet_decoder_work.b_frame_type = 0;
-            t1_c1_packet_decoder_work.state = &states[26]; // c1_rx_first_mode_bit
+            decoder->b_frame_type = 0;
+            decoder->state = &states[26]; // c1_rx_first_mode_bit
         }
-        else if (t1_c1_packet_decoder_work.mode == C1_MODE_B)
+        else if (decoder->mode == C1_MODE_B)
         {
-            t1_c1_packet_decoder_work.b_frame_type = 1;
-            t1_c1_packet_decoder_work.state = &states[26]; // c1_rx_first_mode_bit
+            decoder->b_frame_type = 1;
+            decoder->state = &states[26]; // c1_rx_first_mode_bit
         }
         else
         {
-            reset_t1_c1_packet_decoder();
+            reset_t1_c1_packet_decoder(decoder);
         }
     }
     else
     {
-        t1_c1_packet_decoder_work.b_frame_type = 0;
-        t1_c1_packet_decoder_work.c1_packet = 0;
+        decoder->b_frame_type = 0;
+        decoder->c1_packet = 0;
 
-        t1_c1_packet_decoder_work.L |= byte;
-        t1_c1_packet_decoder_work.l = 0;
-        t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l++] = t1_c1_packet_decoder_work.L;
-        t1_c1_packet_decoder_work.L = FULL_TLG_LENGTH_FROM_L_FIELD[t1_c1_packet_decoder_work.L];
+        decoder->L |= byte;
+        decoder->l = 0;
+        decoder->packet[decoder->l++] = decoder->L;
+        decoder->L = FULL_TLG_LENGTH_FROM_L_FIELD[decoder->L];
     }
 }
 
-static void rx_high_nibble_first_data_bit(unsigned bit)
+static void rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_high_nibble_last_data_bit(unsigned bit)
+static void rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
 
-    const unsigned byte = HIGH_NIBBLE_3OUTOF6[t1_c1_packet_decoder_work.byte];
+    const unsigned byte = HIGH_NIBBLE_3OUTOF6[decoder->byte];
 
-    if (byte == 0xFFu) t1_c1_packet_decoder_work.err_3outof = 1;
+    if (byte == 0xFFu) decoder->err_3outof = 1;
 
-    t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l] = byte;
+    decoder->packet[decoder->l] = byte;
 }
 
-static void rx_low_nibble_first_data_bit(unsigned bit)
+static void rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_low_nibble_last_data_bit(unsigned bit)
+static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
 
-    const unsigned byte = LOW_NIBBLE_3OUTOF6[t1_c1_packet_decoder_work.byte];
+    const unsigned byte = LOW_NIBBLE_3OUTOF6[decoder->byte];
 
-    if (byte == 0xFFu) t1_c1_packet_decoder_work.err_3outof = 1;
+    if (byte == 0xFFu) decoder->err_3outof = 1;
 
-    t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l++] |= byte;
+    decoder->packet[decoder->l++] |= byte;
 
-    if (t1_c1_packet_decoder_work.l < t1_c1_packet_decoder_work.L)
+    if (decoder->l < decoder->L)
     {
-        t1_c1_packet_decoder_work.state = &states[13]; // rx_high_nibble_first_data_bit
-    }
-    else
-    {
-        time_t now;
-        time(&now);
-
-        struct tm *timeinfo = gmtime(&now);
-        strftime(t1_c1_packet_decoder_work.timestamp, sizeof(t1_c1_packet_decoder_work.timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
-    }
-}
-
-static void c1_rx_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-}
-
-static void c1_rx_first_mode_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
-}
-
-static void c1_rx_last_mode_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-
-    t1_c1_packet_decoder_work.mode <<= 4;
-    t1_c1_packet_decoder_work.mode |= t1_c1_packet_decoder_work.byte;
-
-    if (t1_c1_packet_decoder_work.byte == C1_MODE_AB_TRAILER)
-    {
-        t1_c1_packet_decoder_work.c1_packet = 1;
-    }
-    else
-    {
-        reset_t1_c1_packet_decoder();
-    }
-}
-
-static void c1_rx_first_lfield_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
-}
-
-static void c1_rx_last_lfield_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-
-    t1_c1_packet_decoder_work.L = t1_c1_packet_decoder_work.byte;
-    t1_c1_packet_decoder_work.l = 0;
-    t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l++] = t1_c1_packet_decoder_work.L;
-    if (t1_c1_packet_decoder_work.b_frame_type)
-    {
-        t1_c1_packet_decoder_work.L = get_mode_b_tlg_length(t1_c1_packet_decoder_work.L); 
-    }
-    else
-    {
-        t1_c1_packet_decoder_work.L = FULL_TLG_LENGTH_FROM_L_FIELD[t1_c1_packet_decoder_work.L];
-    }
-}
-
-static void c1_rx_first_data_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte = (bit & PACKET_DATABIT_MASK);
-}
-
-static void c1_rx_last_data_bit(unsigned bit)
-{
-    t1_c1_packet_decoder_work.byte <<= 1;
-    t1_c1_packet_decoder_work.byte |= (bit & PACKET_DATABIT_MASK);
-
-    t1_c1_packet_decoder_work.packet[t1_c1_packet_decoder_work.l++] = t1_c1_packet_decoder_work.byte;
-
-    if (t1_c1_packet_decoder_work.l < t1_c1_packet_decoder_work.L)
-    {
-        t1_c1_packet_decoder_work.state = &states[38]; // c1_rx_first_data_bit
+        decoder->state = &states[13]; // rx_high_nibble_first_data_bit
     }
     else
     {
@@ -465,7 +393,85 @@ static void c1_rx_last_data_bit(unsigned bit)
         time(&now);
 
         struct tm *timeinfo = gmtime(&now);
-        strftime(t1_c1_packet_decoder_work.timestamp, sizeof(t1_c1_packet_decoder_work.timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
+        strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
+    }
+}
+
+static void c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+}
+
+static void c1_rx_first_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
+}
+
+static void c1_rx_last_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+
+    decoder->mode <<= 4;
+    decoder->mode |= decoder->byte;
+
+    if (decoder->byte == C1_MODE_AB_TRAILER)
+    {
+        decoder->c1_packet = 1;
+    }
+    else
+    {
+        reset_t1_c1_packet_decoder(decoder);
+    }
+}
+
+static void c1_rx_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
+}
+
+static void c1_rx_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+
+    decoder->L = decoder->byte;
+    decoder->l = 0;
+    decoder->packet[decoder->l++] = decoder->L;
+    if (decoder->b_frame_type)
+    {
+        decoder->L = get_mode_b_tlg_length(decoder->L); 
+    }
+    else
+    {
+        decoder->L = FULL_TLG_LENGTH_FROM_L_FIELD[decoder->L];
+    }
+}
+
+static void c1_rx_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte = (bit & PACKET_DATABIT_MASK);
+}
+
+static void c1_rx_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+{
+    decoder->byte <<= 1;
+    decoder->byte |= (bit & PACKET_DATABIT_MASK);
+
+    decoder->packet[decoder->l++] = decoder->byte;
+
+    if (decoder->l < decoder->L)
+    {
+        decoder->state = &states[38]; // c1_rx_first_data_bit
+    }
+    else
+    {
+        time_t now;
+        time(&now);
+
+        struct tm *timeinfo = gmtime(&now);
+        strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
     }
 }
 
@@ -590,6 +596,7 @@ static unsigned cook_pkt(uint8_t *data, unsigned datalen)
 /** @brief Strip CRCs in place. */
 static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
 {
+    uint8_t *const L = data;
     uint8_t *dst = data;
     unsigned dstlen = 0;
 
@@ -620,6 +627,11 @@ static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
                 datalen -= datalen;
             }
         }
+
+        // L field has to be a number of data bytes in the datagram without CRC bytes.
+        // dstlen is this "number of data bytes" already but has an add-on of L field itself,
+        // which is going to be subtracted in the next step.
+        *L = dstlen - 1;
     }
 
     return dstlen;
@@ -634,58 +646,59 @@ static inline uint32_t get_serial(const uint8_t *const packet)
     return serial;
 }
 
-static void t1_c1_packet_decoder(unsigned bit, unsigned rssi)
+static void t1_c1_packet_decoder(unsigned bit, unsigned rssi, struct t1_c1_packet_decoder_work *decoder, const char *algorithm)
 {
-    t1_c1_packet_decoder_work.current_rssi = rssi;
+    decoder->current_rssi = rssi;
 
-    (*t1_c1_packet_decoder_work.state++)(bit);
+    (*decoder->state++)(bit, decoder);
 
-    if (*t1_c1_packet_decoder_work.state == idle)
+    if (*decoder->state == idle)
     {
         // nothing
     }
-    else if (*t1_c1_packet_decoder_work.state == done)
+    else if (*decoder->state == done)
     {
-        if (t1_c1_packet_decoder_work.b_frame_type)
+        if (decoder->b_frame_type)
         {
-            t1_c1_packet_decoder_work.crc_ok = check_calc_crc_wmbus_b_frame_type(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L) ? 1 : 0;
+            decoder->crc_ok = check_calc_crc_wmbus_b_frame_type(decoder->packet, decoder->L) ? 1 : 0;
         }
         else
         {
-            t1_c1_packet_decoder_work.crc_ok = check_calc_crc_wmbus(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L) ? 1 : 0;
+            decoder->crc_ok = check_calc_crc_wmbus(decoder->packet, decoder->L) ? 1 : 0;
         }
 
-        fprintf(stdout, "%s;%u;%u;%s;%u;%u;%08X;", t1_c1_packet_decoder_work.c1_packet ? "C1": "T1",
-                t1_c1_packet_decoder_work.crc_ok,
-                t1_c1_packet_decoder_work.err_3outof^1,
-                t1_c1_packet_decoder_work.timestamp,
-                t1_c1_packet_decoder_work.packet_rssi,
+        algorithm = ""; // uncomment of want to see which algorithm is executed right now
+        fprintf(stdout, "%s%s;%u;%u;%s;%u;%u;%08X;", algorithm, decoder->c1_packet ? "C1": "T1",
+               decoder->crc_ok,
+               decoder->err_3outof^1,
+               decoder->timestamp,
+               decoder->packet_rssi,
                 rssi,
-                get_serial(t1_c1_packet_decoder_work.packet));
+                get_serial(decoder->packet));
 
 #if 0
         fprintf(stdout, "0x");
-        for (size_t l = 0; l < t1_c1_packet_decoder_work.L; l++) fprintf(stdout, "%02x", t1_c1_packet_decoder_work.packet[l]);
+        for (size_t l = 0; l < decoder->L; l++) fprintf(stdout, "%02x", decoder->packet[l]);
         fprintf(stdout, ";");
 #endif
 
 #if 1
-        if (t1_c1_packet_decoder_work.b_frame_type)
+        if (decoder->b_frame_type)
         {
-            t1_c1_packet_decoder_work.L = cook_pkt_b_frame_type(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L);
+            decoder->L = cook_pkt_b_frame_type(decoder->packet, decoder->L);
         }
         else
         {
-            t1_c1_packet_decoder_work.L = cook_pkt(t1_c1_packet_decoder_work.packet, t1_c1_packet_decoder_work.L);
+            decoder->L = cook_pkt(decoder->packet, decoder->L);
         }
         fprintf(stdout, "0x");
-        for (size_t l = 0; l < t1_c1_packet_decoder_work.L; l++) fprintf(stdout, "%02x", t1_c1_packet_decoder_work.packet[l]);
+        for (size_t l = 0; l < decoder->L; l++) fprintf(stdout, "%02x", decoder->packet[l]);
 #endif
 
         fprintf(stdout, "\n");
         fflush(stdout);
 
-        reset_t1_c1_packet_decoder();
+        reset_t1_c1_packet_decoder(decoder);
     }
     else
     {
@@ -693,7 +706,7 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi)
         // The current packet seems to be collided with an another one.
         if (rssi < PACKET_CAPTURE_THRESHOLD)
         {
-            reset_t1_c1_packet_decoder();
+            reset_t1_c1_packet_decoder(decoder);
         }
     }
 }

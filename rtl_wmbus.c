@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 <xael.south@yandex.com>
+ * Copyright (c) 2021 <xael.south@yandex.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,6 +23,7 @@
  * SUCH DAMAGE.
  */
 
+#include <getopt.h> 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -38,11 +39,49 @@
 #include "net_support.h"
 #include "t1_c1_packet_decoder.h"
 
+static const uint32_t ACCESS_CODE = 0b0101010101010000111101u;
+static const uint32_t ACCESS_CODE_BITMASK = 0x3FFFFFu;
+static const unsigned ACCESS_CODE_ERRORS = 1u; // 0 if no errors allowed
 
-#if defined(__SSE4_2__)
-#include <immintrin.h>
-#endif
+/* deglitch_filter has been calculated by Python script as follows.
+   The filter is counting "1" among 7 bits and saying "1" if count("1") >= 3 else "0".
+   Notice here count("1") >= 3. (More intuitive in that case would be count("1") >= 3.5.)
+   That forces the filter to put more "1" than "0" on the output, because RTL-SDR streams
+   more "0" than "1" - i don't know why RTL-SDR do this.
+x = 'static const uint8_t deglitch_filter[128] = {'
+mod8 = 8
 
+for i in range(2**7):
+    s = '{0:07b};'.format(i)
+    val = '1' if bin(i).count("1") >= 3 else '0'
+    print(s[0] + ";" + s[1] + ";" + s[2] + ";" + s[3] + ";" + s[4] + ";" + s[5] + ";" + s[6] + ";;%d;;%s" % (bin(i).count("1"), val))
+
+    if i % 8 == 0: x += '\n\t'
+    x += val + ','
+
+x += '};\n'
+
+print(x)
+*/
+static const uint8_t deglitch_filter[128] =
+{
+    0,0,0,0,0,0,0,1,
+    0,0,0,1,0,1,1,1,
+    0,0,0,1,0,1,1,1,
+    0,1,1,1,1,1,1,1,
+    0,0,0,1,0,1,1,1,
+    0,1,1,1,1,1,1,1,
+    0,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    0,0,0,1,0,1,1,1,
+    0,1,1,1,1,1,1,1,
+    0,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    0,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1
+};
 
 static float lp_1600kHz_56kHz(int sample, size_t i_or_q)
 {
@@ -284,46 +323,177 @@ static inline unsigned count_set_bits(uint32_t n)
 }
 
 
-static inline int majority_votes_bitfilter(uint32_t unfilt_bitstream, uint32_t bits_in_unfilt_bitstream)
+struct runlength_algorithm
 {
-    const unsigned ones = count_set_bits(unfilt_bitstream & bits_in_unfilt_bitstream);
-    const bool odd = (ones & 1) > 0;
-    const uint32_t bits_in_unfilt_bitstream_half = count_set_bits(bits_in_unfilt_bitstream)/2;
+    int run_length;
+    int bit_length;
+    int cum_run_length_error;
+    unsigned state;
+    uint32_t raw_bitstream;
+    uint32_t bitstream;
+    struct t1_c1_packet_decoder_work decoder;
+};
 
-    if (odd)
-        return (ones <= bits_in_unfilt_bitstream_half) ? 0 : 1;
-
-    if (ones < bits_in_unfilt_bitstream_half)
-        return 0;
-
-    if (ones > bits_in_unfilt_bitstream_half)
-        return 1;
-
-    return unfilt_bitstream & 1;
+static void runlength_algorithm_reset(struct runlength_algorithm *algo)
+{
+    algo->run_length = 0;
+    algo->bit_length = 8 * 256;
+    algo->cum_run_length_error = 0;
+    algo->state = 0u;
+    algo->raw_bitstream = 0;
+    algo->bitstream = 0;
+    reset_t1_c1_packet_decoder(&algo->decoder);
 }
 
-
-typedef void (*OutFunction)(unsigned bit, unsigned rssi);
-
-
-static inline void to_stdout(unsigned bit, unsigned rssi)
+static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlength_algorithm *algo)
 {
-    (void)rssi;
+    algo->raw_bitstream = (algo->raw_bitstream << 1) | raw_bit;
 
-    const uint8_t tmp = bit;
+    const unsigned state = deglitch_filter[algo->raw_bitstream & 0x3Fu];
 
-    fwrite(&tmp, sizeof(tmp), 1, stdout);
+    if (algo->state == state)
+    {
+        algo->run_length++;
+    }
+    else
+    {
+        if (algo->run_length < 5)
+        {
+            runlength_algorithm_reset(algo);
+            algo->state = state;
+            algo->run_length = 1;
+            return;
+        }
+
+        const int unscaled_run_length = algo->run_length;
+
+        algo->run_length *= 256; // resolution scaling up for fixed point calculation
+
+        const int half_bit_length = algo->bit_length / 2;
+
+        if (algo->run_length <= half_bit_length)
+        {
+            runlength_algorithm_reset(algo);
+            algo->state = state;
+            algo->run_length = 1;
+            return;
+        }
+
+        int num_of_bits_rx;
+        for (num_of_bits_rx = 0; algo->run_length > half_bit_length; num_of_bits_rx++)
+        {
+            algo->run_length -= algo->bit_length;
+
+            unsigned bit = algo->state;
+
+            algo->bitstream = (algo->bitstream << 1) | bit;
+
+            if (count_set_bits((algo->bitstream & ACCESS_CODE_BITMASK) ^ ACCESS_CODE) <= ACCESS_CODE_ERRORS)
+            {
+                bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+            }
+
+            t1_c1_packet_decoder(bit, rssi, &algo->decoder, "rla;");
+        }
+
+        #if 0
+        const int bit_error_length = algo->run_length / num_of_bits_rx;
+        if (in_rx_t1_c1_packet_decoder(&algo->decoder))
+        {
+            fprintf(stdout, "rl = %d, num_of_bits_rx = %d, bit_length = %d, old_bit_error_length = %d, new_bit_error_length = %d\n",
+                    unscaled_run_length, num_of_bits_rx, algo->bit_length, algo->bit_error_length, bit_error_length);
+        }
+        #endif
+
+        // Some kind of PI controller is implemented below: u[n] = u[n-1] + Kp * e[n] + Ki * sum(e[0..n]).
+        // Kp and Ki were found by experiment; e[n] := algo->run_length
+        algo->cum_run_length_error += algo->run_length; // sum(e[0..n])
+        #define PI_KP  32
+        #define PI_KI  16
+        //algo->bit_length += (algo->run_length / PI_KP + algo->cum_run_length_error / PI_KI) / num_of_bits_rx;
+        algo->bit_length += (algo->run_length + algo->cum_run_length_error / PI_KI) / (PI_KP * num_of_bits_rx);
+        #undef PI_KI
+        #undef PI_KP
+
+        algo->state = state;
+        algo->run_length = 1;
+    }
 }
 
+struct time2_algorithm
+{
+    uint32_t bitstream;
+    struct t1_c1_packet_decoder_work decoder;
+};
 
-static const OutFunction out_functions[] = { to_stdout, t1_c1_packet_decoder };
+static void time2_algorithm_reset(struct time2_algorithm *algo)
+{
+    algo->bitstream = 0;
+    reset_t1_c1_packet_decoder(&algo->decoder);
+}
 
+static void time2_algorithm(unsigned bit, unsigned rssi, struct time2_algorithm *algo)
+{
+    algo->bitstream = (algo->bitstream << 1) | bit;
+
+    if (count_set_bits((algo->bitstream & ACCESS_CODE_BITMASK) ^ ACCESS_CODE) <= ACCESS_CODE_ERRORS)
+    {
+        bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+    }
+
+    t1_c1_packet_decoder(bit, rssi, &algo->decoder, "t2a;");
+}
+
+static int opts_run_length_algorithm_enabled = 1;
+static int opts_time2_algorithm_enabled = 1;
+
+static void print_usage(const char *program_name)
+{
+    fprintf(stdout, "Usage %s:\n", program_name);
+    fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
+    fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
+}
+
+static void process_options(int argc, char *argv[])
+{
+    int option;
+
+    while ((option = getopt(argc, argv, "r:t:")) != -1)
+    {
+        switch (option)
+        {
+        case 'r':
+            if (strcmp(optarg, "0") == 0)
+            {
+                opts_run_length_algorithm_enabled = 0;
+            }
+            else
+            {
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 't':
+            if (strcmp(optarg, "0") == 0)
+            {
+                opts_time2_algorithm_enabled = 0;
+            }
+            else
+            {
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            }
+            break;
+        default:
+            print_usage(argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
-
+    process_options(argc, argv);
 
     // --- parameter section begin ---
     // The idea behind the variables in the section is to make parameters
@@ -331,37 +501,26 @@ int main(int argc, char *argv[])
     const unsigned CLOCK_LOCK_THRESHOLD = 2;
 
     const unsigned DECIMATION_RATE = 2;
-
-    //#define USING_BITFILTER
-
-    const uint32_t ACCESS_CODE = 0b0101010101010000111101u;
-    const uint32_t ACCESS_CODE_BITMASK = 0x3FFFFFu;
-    const unsigned ACCESS_CODE_ERRORS = 1u; // 0 if no errors allowed
     // --- parameter section end ---
-
-    // Select function for output
-    OutFunction out_function = out_functions[1];
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
     float i = 0, q = 0;
     unsigned decimation_rate_index = 0;
     int16_t old_clock = INT16_MIN;
-    uint32_t bitstream = 0;
     unsigned clock_lock = 0;
 
-#if defined(USING_BITFILTER)
-    uint32_t unfilt_bitstream = 0;
-    uint32_t bits_in_unfilt_bitstream = 0;
-#endif
+    struct time2_algorithm t2_algo;
+    time2_algorithm_reset(&t2_algo);
 
-#if defined (__SSE4_2__)
-    __attribute__((__aligned__(16))) int16_t iq_samples[sizeof(samples)];
-    const __m128i dc_offset = _mm_set_epi16(-127, -127, -127, -127, -127, -127, -127, -127);
-#endif
+    struct runlength_algorithm rl_algo;
+    runlength_algorithm_reset(&rl_algo);
 
-    //FILE *input = fopen("samples.bin", "rb");
+    //FILE *input = fopen("samples/samples2.bin", "rb");
+    //FILE *input = fopen("samples/kamstrup.bin", "rb");
+    //FILE *input = fopen("samples/c1_mode_b.bin", "rb");
+    //FILE *input = fopen("samples/t1_c1a_mixed.bin", "rb");
     //FILE *input = get_net("localhost", 14423);
-    FILE *input= stdin;
+    FILE *input = stdin;
 
     if (input == NULL)
     {
@@ -373,6 +532,7 @@ int main(int argc, char *argv[])
     //FILE *demod_out2 = fopen("demod.bin", "wb");
     //FILE *clock_out = fopen("clock.bin", "wb");
     //FILE *bits_out= fopen("bits.bin", "wb");
+    //FILE *rawbits_out = fopen("rawbits.bin", "wb");
 
     while (!feof(input))
     {
@@ -383,24 +543,10 @@ int main(int argc, char *argv[])
             return 2;
         }
 
-#if defined (__SSE4_2__)
-        for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 8)   // +2 : i and q interleaved
-        {
-            __m128i tmp = _mm_loadu_si128((__m128i const*)&samples[k]); // Hmmm, loading 8 byte besides of upper boundary?..
-            __m128i cvt = _mm_add_epi16(_mm_cvtepu8_epi16(tmp), dc_offset);
-            _mm_store_si128((__m128i *)&iq_samples[k], cvt);
-        }
-#endif
-
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
         {
-#if defined (__SSE4_2__)
-            const int i_unfilt = iq_samples[k];
-            const int q_unfilt = iq_samples[k+1];
-#else
             const int i_unfilt = ((int)samples[k]     - 127);
             const int q_unfilt = ((int)samples[k + 1] - 127);
-#endif
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
             // that i and q signals don't contain frequencies above new sample
@@ -436,7 +582,6 @@ int main(int argc, char *argv[])
 
             // Demodulate.
             float delta_phi = polar_discriminator(i, q);
-
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
@@ -444,6 +589,26 @@ int main(int argc, char *argv[])
             delta_phi = lp_fir_butter_800kHz_100kHz_10kHz(delta_phi);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
+
+            // Get the bit!
+            unsigned bit = (delta_phi >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
+            //int16_t u = bit ? (INT16_MAX-1) : 0;
+            //fwrite(&u, sizeof(u), 1, rawbits_out);
+
+            // --- rssi filtering section begin ---
+            // We are using one simple filter to rssi value in order to
+            // prevent unexpected "splashes" in signal power.
+            float rssi = sqrtf(i*i + q*q);
+            rssi = rssi_filter(rssi); // comment out, if rssi filtering is unwanted
+#if defined(USE_MOVING_AVERAGE)
+            // If using moving average, we would have doubles of each of i- and q- signal components.
+            rssi /= DECIMATION_RATE;
+#endif
+            // --- rssi filtering section end ---
+
+            // --- runlength algorithm section begin ---
+            if (opts_run_length_algorithm_enabled) runlength_algorithm(bit, rssi, &rl_algo);
+            // --- runlength algorithm section end ---
 
             // --- clock recovery section begin ---
             // The time-2 method is implemented: push squared signal through a bandpass
@@ -453,26 +618,9 @@ int main(int argc, char *argv[])
             const int16_t clock = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi * delta_phi) >= 0) ? INT16_MAX : INT16_MIN;
             //fwrite(&clock, sizeof(clock), 1, clock_out);
 
-            unsigned bit = (delta_phi >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
-
-#if defined(USING_BITFILTER)
-            unfilt_bitstream = (unfilt_bitstream << 1) | bit;
-            bits_in_unfilt_bitstream = (bits_in_unfilt_bitstream << 1) | 1;
-#endif
-
-            // We are using one simple filter to rssi value in order to
-            // prevent unexpected "splashes" in signal power.
-            float rssi = sqrtf(i*i + q*q);
-            rssi = rssi_filter(rssi); // comment out, if rssi filtering is unwanted
-
             if (clock > old_clock)   // rising edge
             {
                 clock_lock = 1;
-
-#if defined(USING_BITFILTER)
-                unfilt_bitstream = bit;
-                bits_in_unfilt_bitstream = 1;
-#endif
             }
             else if (old_clock == clock && clock_lock < CLOCK_LOCK_THRESHOLD)
             {
@@ -482,25 +630,8 @@ int main(int argc, char *argv[])
             {
                 clock_lock++;
 
-#if defined(USE_MOVING_AVERAGE)
-                // If using moving average, we would habe doubles of each of i- and q- signal components.
-                rssi /= DECIMATION_RATE;
-#endif
-
-#if defined(USING_BITFILTER)
-                // Bitfilter can be used to remove unwanted spikes in the demodulated signal.
-                bit = majority_votes_bitfilter(unfilt_bitstream, bits_in_unfilt_bitstream);
-#endif
-
-                bitstream = (bitstream << 1) | bit;
-
-                if (count_set_bits((bitstream & ACCESS_CODE_BITMASK) ^ ACCESS_CODE) <= ACCESS_CODE_ERRORS)
-                {
-                    bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
-                }
-
                 //fwrite(&bit, sizeof(bit), 1, bits_out);
-                out_function(bit, rssi);
+                if (opts_time2_algorithm_enabled) time2_algorithm(bit, rssi, &t2_algo);
             }
             old_clock = clock;
             // --- clock recovery section end ---

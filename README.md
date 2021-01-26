@@ -55,19 +55,41 @@ Before building Android version the SDK and NDK have to be installed. See androi
 
 Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s is hardcoded and cannot be changed.
 
-samples2.bin is a "live" example with two devices received.
+samples/samples2.bin is a live example with two devices received.
 
 On Android first the driver must be started with options given above. IQ-data goes to a port which is would be already set by driver settings. Use get_net to get IQ-data into rtl_wmbus.
 
    Bugfixing
    -----
-Mode C1 datagram type B is supported now - thanks to Fredrik Öhrström for spotting this bug and for providing raw datagram samples.
-An another thanks to Kjell Braden (afflux) and to carlos62 for the idea how to fix this.
-   
+Mode C1 datagram type B is supported now - thanks to Fredrik Öhrström for spotting this and for providing raw datagram samples.
+An another thanks goes to Kjell Braden (afflux) and to carlos62 for the idea how to implement this.
+
+Redefining CFLAGS and OUTPUT directory is allowed now (patch sent by dwrobel).
+
+L(ength) field from C1 mode B datagrams does not include CRC bytes anymore: L field will now be printed as if the datagram
+would be received from a T1 or C1 mode A meter.
+
+   Improvements
+   -----
+A new method for picking datagrams out of the bit stream that _could_ probably better perform in C1 mode has been implemented.
+I called that "run length algorithm". I don't know if any similar term already exists in the literature. 
+The new method is very sensitive to the bit glitches, which have to be filtered out of the bit stream with an asymmetrical glitch filter.
+The glitch filter _must_ be implemented asymmetrical in this case, because RTL-SDR produces more "0" bits than "1" bits on it's output.
+The latter seems more to be a hardware feature rather than a bug.
+
+Run length algorithm is running in parallel (and fully independantly) to the time2 method. You will eventually get two
+identical datagrams - each of them decoded by one of the both methods. If you really want avoiding duplicates, then start
+rtl_wmbus with "-r 0" or "-t 0" argument to prevent executing of run length or time2 method respectively.
+You can play with arguments and check which method performs better for you. Please note, that both method are active by default.
+
+An additional method introduces more calculation steps, so I'm not sure if Raspberry Pi 1 will still do.
+
+Run length algorithm works well with a few mode C1 devices I had around me, but can still be improved with your help.
+
   License
   -------
 
-Copyright (c) 2017 <xael.south@yandex.com>
+Copyright (c) 2021 <xael.south@yandex.com>
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
 are met:
