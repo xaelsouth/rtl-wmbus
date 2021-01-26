@@ -6,7 +6,7 @@ STRIP=strip
 OUTDIR?=build
 OUTFILE="$(OUTDIR)/rtl_wmbus"
 CFLAGS?=-Iinclude -std=gnu99
-CFLAGS_WARNINGS?=-Wall -W -Waggregate-return -Wbad-function-cast -Wcast-align -Wcast-qual -Wchar-subscripts -Wcomment -Wfloat-equal -Winline -Wmain -Wmissing-noreturn -Wmissing-prototypes -Wparentheses -Wpointer-arith -Wredundant-decls -Wreturn-type -Wshadow -Wsign-compare -Wstrict-prototypes -Wswitch -Wunreachable-code -Wunused -Wuninitialized
+CFLAGS_WARNINGS?=-Wall -W -Waggregate-return -Wbad-function-cast -Wcast-align -Wcast-qual -Wchar-subscripts -Wcomment -Wno-float-equal -Winline -Wmain -Wmissing-noreturn -Wno-missing-prototypes -Wparentheses -Wpointer-arith -Wredundant-decls -Wreturn-type -Wshadow -Wsign-compare -Wstrict-prototypes -Wswitch -Wunreachable-code -Wunused -Wuninitialized
 LIB?=-lm
 SRC=rtl_wmbus.c
 
@@ -26,6 +26,9 @@ pi1:
 	$(CC) -DNDEBUG -O3 -march=armv6 -mtune=arm1176jzf-s -mfloat-abi=hard -mfpu=vfp -ffast-math $(CFLAGS) $(CFLAGS_WARNINGS) -o $(OUTFILE) $(SRC) $(LIB)
 
 rebuild: clean all
+
+install: release
+	cp $(OUTFILE) /usr/bin
 
 clean:
 	$(RM) -rf "$(OUTDIR)"

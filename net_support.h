@@ -14,7 +14,7 @@ FILE * get_net(const char *hostname, int port);
 
 FILE * get_net(const char *hostname, int port)
 {
-    struct sockaddr_in address = {.sin_family = AF_INET, .sin_port = htons(port)};
+    struct sockaddr_in address = {.sin_family = AF_INET, .sin_port = htons(port), .sin_addr = {} };
     if (-1 == inet_aton(hostname, &address.sin_addr))
     {
         fprintf(stderr, "inet_aton() error\n");
