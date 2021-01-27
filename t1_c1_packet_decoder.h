@@ -552,13 +552,27 @@ static bool check_calc_crc_wmbus_b_frame_type(const uint8_t *data, size_t datale
     return crc_ok;
 }
 
+__attribute__((__packed__))
+struct wmmbus_header_with_crc
+{
+    uint8_t L;                  // 1
+    uint8_t C;                  // 1
+    uint16_t manufacturer;      // 2
+    uint32_t ident_no;          // 4
+    uint8_t version;            // 1
+    uint8_t device_type;        // 1
+    uint16_t crc;               // 2
+};                              // 12 bytes in total.
+
 /** @brief Strip CRCs in place. */
 static unsigned cook_pkt(uint8_t *data, unsigned datalen)
 {
+    const uint8_t *const L = data; // Valid for T1 and C1 mode A: L = len(data). (Without CRC bytes included).
     uint8_t *dst = data;
     unsigned dstlen = 0;
 
-    if (datalen >= 12)
+    if (*L > 0 &&               // L should be greater than 0 bytes.
+        datalen >= sizeof(struct wmmbus_header_with_crc))
     {
         dst += 10;
         dstlen += 10;
@@ -597,11 +611,12 @@ static unsigned cook_pkt(uint8_t *data, unsigned datalen)
 /** @brief Strip CRCs in place. */
 static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
 {
-    uint8_t *const L = data;
+    uint8_t *const L = data; // Valid for C1 mode B: L = len(data) + num of CRC bytes. (With CRC bytes included.)
     uint8_t *dst = data;
     unsigned dstlen = 0;
 
-    if (datalen >= 12)
+    if (*L >= 2 &&   // L should be at least 2 bytes long - means only CRC was received :).
+        datalen >=  sizeof(struct wmmbus_header_with_crc))
     {
         while (datalen)
         {
@@ -616,6 +631,8 @@ static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
 
                 data += 128;
                 datalen -= 128;
+
+                *L = *L - 2;
             }
             else
             {
@@ -626,13 +643,10 @@ static unsigned cook_pkt_b_frame_type(uint8_t *data, unsigned datalen)
 
                 data += datalen;
                 datalen -= datalen;
+
+                *L = *L - 2;
             }
         }
-
-        // L field has to be a number of data bytes in the datagram without CRC bytes.
-        // dstlen is this "number of data bytes" already but has an add-on of L field itself,
-        // which is going to be subtracted in the next step.
-        *L = dstlen - 1;
     }
 
     return dstlen;
