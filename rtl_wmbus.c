@@ -447,6 +447,7 @@ static void time2_algorithm(unsigned bit, unsigned rssi, struct time2_algorithm 
 static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
 static unsigned decimation_rate = 2u;
+int show_used_algorithm = 0;
 
 static void print_usage(const char *program_name)
 {
@@ -454,13 +455,14 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
+    fprintf(stdout, "\t-s show used algorithm in the output\n");
 }
 
 static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "d:r:t:")) != -1)
+    while ((option = getopt(argc, argv, "d:r:st:")) != -1)
     {
         switch (option)
         {
@@ -488,6 +490,9 @@ static void process_options(int argc, char *argv[])
             break;
         case 'd':
             decimation_rate = strtoul(optarg, NULL, 10);
+            break;
+        case 's':
+            show_used_algorithm = 1;
             break;
         default:
             print_usage(argv[0]);

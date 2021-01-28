@@ -2,6 +2,9 @@
 
 rtl-wmbus is a software defined receiver for Wireless-M-Bus. It is written in plain C and uses RTL-SDR (https://github.com/osmocom/rtl-sdr) to interface with RTL2832-based hardware.
 
+It can also use LimeSDR or other SDR receiver through rx_sdr (see https://github.com/rxseger/rx_tools),
+which in turn is using SoapySDR to interface with underlying hardware in a vendor-neutral way.
+
 Wireless-M-Bus is the wireless version of M-Bus ("Meter-Bus", http://www.m-bus.com), which is an European standard for remote reading of smart meters.
 
 The primary purpose of rtl-wmbus is experimenting with digital signal processing and software radio. rtl-wmbus can be used on resource constrained devices such Raspberry Pi Zero or Raspberry PI B+ overclocked to 1GHz. Any Android based tablet will do the same too.
@@ -48,6 +51,10 @@ Before building Android version the SDK and NDK have to be installed. See androi
  To run continuously:
 
  * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
+
+ To run continuously with rx_sdr (or even with a higher sampling and decimation rate)
+ * rx_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
+ * rx_sdr -f 868.95M -s 4000000 - 2>/dev/null | build/rtl_wmbus -d 5
 
  To count "good" (no 3 out of 6 errors, no checksum errors) packets:
 

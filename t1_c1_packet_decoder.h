@@ -661,6 +661,8 @@ static inline uint32_t get_serial(const uint8_t *const packet)
     return serial;
 }
 
+extern int show_used_algorithm;
+
 static void t1_c1_packet_decoder(unsigned bit, unsigned rssi, struct t1_c1_packet_decoder_work *decoder, const char *algorithm)
 {
     decoder->current_rssi = rssi;
@@ -682,7 +684,7 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi, struct t1_c1_packe
             decoder->crc_ok = check_calc_crc_wmbus(decoder->packet, decoder->L) ? 1 : 0;
         }
 
-        algorithm = ""; // uncomment of want to see which algorithm is executed right now
+        if (!show_used_algorithm) algorithm = "";
         fprintf(stdout, "%s%s;%u;%u;%s;%u;%u;%08X;", algorithm, decoder->c1_packet ? "C1": "T1",
                decoder->crc_ok,
                decoder->err_3outof^1,
