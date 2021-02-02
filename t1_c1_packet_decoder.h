@@ -137,23 +137,21 @@ static const uint16_t CRC16_DNP_TABLE[] =
 struct t1_c1_packet_decoder_work;
 typedef void (*t1_c1_packet_decoder_state)(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void done(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_c1_idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_c1_done(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
-static void rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
-
-static void c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
+static void t1_rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
 static void c1_rx_first_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 static void c1_rx_last_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
@@ -165,64 +163,64 @@ static void c1_rx_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work 
 static void c1_rx_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder);
 
 
-static const t1_c1_packet_decoder_state states[] =
+static const t1_c1_packet_decoder_state t1_c1_decoder_states[] =
 {
-    idle,                                          // 0
+    t1_c1_idle,                                    // 0
 
-    rx_high_nibble_first_lfield_bit,               // 1
-    rx_bit,                                        // 2
-    rx_bit,                                        // 3
-    rx_bit,                                        // 4
-    rx_bit,                                        // 5
-    rx_high_nibble_last_lfield_bit,                // 6
+    t1_rx_high_nibble_first_lfield_bit,            // 1
+    t1_c1_rx_bit,                                  // 2
+    t1_c1_rx_bit,                                  // 3
+    t1_c1_rx_bit,                                  // 4
+    t1_c1_rx_bit,                                  // 5
+    t1_rx_high_nibble_last_lfield_bit,             // 6
 
-    rx_low_nibble_first_lfield_bit,                // 7
-    rx_bit,                                        // 8
-    rx_bit,                                        // 9
-    rx_bit,                                        // 10
-    rx_bit,                                        // 11
-    rx_low_nibble_last_lfield_bit,                 // 12
+    t1_rx_low_nibble_first_lfield_bit,             // 7
+    t1_c1_rx_bit,                                  // 8
+    t1_c1_rx_bit,                                  // 9
+    t1_c1_rx_bit,                                  // 10
+    t1_c1_rx_bit,                                  // 11
+    t1_rx_low_nibble_last_lfield_bit,              // 12
 
-    rx_high_nibble_first_data_bit,                 // 13
-    rx_bit,                                        // 14
-    rx_bit,                                        // 15
-    rx_bit,                                        // 16
-    rx_bit,                                        // 17
-    rx_high_nibble_last_data_bit,                  // 18
+    t1_rx_high_nibble_first_data_bit,              // 13
+    t1_c1_rx_bit,                                  // 14
+    t1_c1_rx_bit,                                  // 15
+    t1_c1_rx_bit,                                  // 16
+    t1_c1_rx_bit,                                  // 17
+    t1_rx_high_nibble_last_data_bit,               // 18
 
-    rx_low_nibble_first_data_bit,                  // 19
-    rx_bit,                                        // 20
-    rx_bit,                                        // 21
-    rx_bit,                                        // 22
-    rx_bit,                                        // 23
-    rx_low_nibble_last_data_bit,                   // 24
+    t1_rx_low_nibble_first_data_bit,               // 19
+    t1_c1_rx_bit,                                  // 20
+    t1_c1_rx_bit,                                  // 21
+    t1_c1_rx_bit,                                  // 22
+    t1_c1_rx_bit,                                  // 23
+    t1_rx_low_nibble_last_data_bit,                // 24
 
-    done,                                          // 25
+    t1_c1_done,                                    // 25
 
     c1_rx_first_mode_bit,                          // 26
-    c1_rx_bit,                                     // 27
-    c1_rx_bit,                                     // 28
+    t1_c1_rx_bit,                                  // 27
+    t1_c1_rx_bit,                                  // 28
     c1_rx_last_mode_bit,                           // 29
 
     c1_rx_first_lfield_bit,                        // 30
-    c1_rx_bit,                                     // 31
-    c1_rx_bit,                                     // 32
-    c1_rx_bit,                                     // 33
-    c1_rx_bit,                                     // 34
-    c1_rx_bit,                                     // 35
-    c1_rx_bit,                                     // 36
+    t1_c1_rx_bit,                                  // 31
+    t1_c1_rx_bit,                                  // 32
+    t1_c1_rx_bit,                                  // 33
+    t1_c1_rx_bit,                                  // 34
+    t1_c1_rx_bit,                                  // 35
+    t1_c1_rx_bit,                                  // 36
     c1_rx_last_lfield_bit,                         // 37
 
     c1_rx_first_data_bit,                          // 38
-    c1_rx_bit,                                     // 39
-    c1_rx_bit,                                     // 40
-    c1_rx_bit,                                     // 41
-    c1_rx_bit,                                     // 42
-    c1_rx_bit,                                     // 43
-    c1_rx_bit,                                     // 44
+    t1_c1_rx_bit,                                  // 39
+    t1_c1_rx_bit,                                  // 40
+    t1_c1_rx_bit,                                  // 41
+    t1_c1_rx_bit,                                  // 42
+    t1_c1_rx_bit,                                  // 43
+    t1_c1_rx_bit,                                  // 44
     c1_rx_last_data_bit,                           // 45
 
-    done,                                          // 46
+    t1_c1_done,                                    // 46
 };
 
 
@@ -263,16 +261,16 @@ int get_mode_b_tlg_length(uint8_t lfield)
 
 static int in_rx_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
 {
-    return (decoder->state == &states[0]) ? 0 : 1;
+    return (decoder->state == &t1_c1_decoder_states[0]) ? 0 : 1;
 }
 
 static void reset_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
 {
     memset(decoder, 0, sizeof(*decoder));
-    decoder->state = &states[0];
+    decoder->state = &t1_c1_decoder_states[0];
 }
 
-static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_c1_idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     if (!(bit & PACKET_PREAMBLE_DETECTED_MASK))
     {
@@ -280,25 +278,25 @@ static void idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
     }
 }
 
-static void done(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_c1_done(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     (void)bit;
     (void)decoder;
 }
 
-static void rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_high_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte = (bit & PACKET_DATABIT_MASK);
     decoder->packet_rssi = decoder->current_rssi;
 }
 
-static void rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
@@ -308,12 +306,12 @@ static void rx_high_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_dec
     decoder->flags = 0;
 }
 
-static void rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_low_nibble_first_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
@@ -327,12 +325,12 @@ static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_deco
         if (decoder->mode == C1_MODE_A)
         {
             decoder->b_frame_type = 0;
-            decoder->state = &states[26]; // c1_rx_first_mode_bit
+            decoder->state = &t1_c1_decoder_states[26]; // c1_rx_first_mode_bit
         }
         else if (decoder->mode == C1_MODE_B)
         {
             decoder->b_frame_type = 1;
-            decoder->state = &states[26]; // c1_rx_first_mode_bit
+            decoder->state = &t1_c1_decoder_states[26]; // c1_rx_first_mode_bit
         }
         else
         {
@@ -351,12 +349,12 @@ static void rx_low_nibble_last_lfield_bit(unsigned bit, struct t1_c1_packet_deco
     }
 }
 
-static void rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_high_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
@@ -368,12 +366,12 @@ static void rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decod
     decoder->packet[decoder->l] = byte;
 }
 
-static void rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_low_nibble_first_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte = (bit & PACKET_DATABIT_MASK);
 }
 
-static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
+static void t1_rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
 {
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
@@ -386,7 +384,7 @@ static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decode
 
     if (decoder->l < decoder->L)
     {
-        decoder->state = &states[13]; // rx_high_nibble_first_data_bit
+        decoder->state = &t1_c1_decoder_states[13]; // rx_high_nibble_first_data_bit
     }
     else
     {
@@ -396,12 +394,6 @@ static void rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_decode
         struct tm *timeinfo = gmtime(&now);
         strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
     }
-}
-
-static void c1_rx_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
-{
-    decoder->byte <<= 1;
-    decoder->byte |= (bit & PACKET_DATABIT_MASK);
 }
 
 static void c1_rx_first_mode_bit(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
@@ -464,7 +456,7 @@ static void c1_rx_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *
 
     if (decoder->l < decoder->L)
     {
-        decoder->state = &states[38]; // c1_rx_first_data_bit
+        decoder->state = &t1_c1_decoder_states[38]; // c1_rx_first_data_bit
     }
     else
     {
@@ -669,11 +661,11 @@ static void t1_c1_packet_decoder(unsigned bit, unsigned rssi, struct t1_c1_packe
 
     (*decoder->state++)(bit, decoder);
 
-    if (*decoder->state == idle)
+    if (*decoder->state == t1_c1_idle)
     {
         // nothing
     }
-    else if (*decoder->state == done)
+    else if (*decoder->state == t1_c1_done)
     {
         if (decoder->b_frame_type)
         {

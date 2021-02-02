@@ -25,6 +25,7 @@
 
 #include <getopt.h> 
 #include <stdint.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <complex.h>
@@ -38,10 +39,16 @@
 #include "atan2.h"
 #include "net_support.h"
 #include "t1_c1_packet_decoder.h"
+#include "s1_packet_decoder.h"
 
-static const uint32_t ACCESS_CODE = 0b0101010101010000111101u;
-static const uint32_t ACCESS_CODE_BITMASK = 0x3FFFFFu;
-static const unsigned ACCESS_CODE_ERRORS = 1u; // 0 if no errors allowed
+static const uint32_t ACCESS_CODE_T1_C1 = 0b0101010101010000111101u;
+static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0x3FFFFFu;
+static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
+
+static const uint32_t ACCESS_CODE_S1 = 0b000111011010010110u;
+static const uint32_t ACCESS_CODE_S1_BITMASK = 0x3FFFFu;
+static const unsigned ACCESS_CODE_S1_ERRORS = 0u; // 0 if no errors allowed
+
 
 /* deglitch_filter has been calculated by a Python script as follows.
    The filter is counting "1" among 7 bits and saying "1" if count("1") >= 3 else "0".
@@ -248,12 +255,28 @@ static inline float bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(float sample)
     return iirf(sample, &filter);
 }
 
-
-static inline float lp_fir_butter_800kHz_100kHz_10kHz(float sample)
+static inline float bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(float sample)
 {
-#define COEFFS 4
-    static const float b[COEFFS] = {0.04421550009, 0.4557844999, 0.4557844999, 0.04421550009, };
+#define GAIN 1.874981046e-06
+#define SECTIONS 3
+    static const float b[3*SECTIONS] = {1, 1.999994187, 0.9999941867, 1, -1.999994026,0.9999940262, 1, -1.605750097e-07, -1.000011787, };
+    static const float a[3*SECTIONS] = {1, -1.92151475, 0.9918135499, 1, -1.922481015,0.984593497, 1, -1.937432099, 0.9927241336, };
+    static float hist[3*SECTIONS] = {};
+    
+    static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist};
+    
+#undef SECTIONS
+#undef GAIN
 
+    return iirf(sample, &filter);
+}
+
+
+
+static inline float lp_fir_butter_800kHz_100kHz_160kHz(float sample)
+{
+#define COEFFS 11
+    static const float b[COEFFS] = {-0.00456638213, -0.002571450348, 0.02689425925, 0.1141330398, 0.2264456422, 0.2793297826, 0.2264456422, 0.1141330398, 0.02689425925, -0.002571450348, -0.00456638213, };
     static float hist[COEFFS];
 
     static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
@@ -262,6 +285,18 @@ static inline float lp_fir_butter_800kHz_100kHz_10kHz(float sample)
     return firf(sample, &filter);
 }
 
+static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
+{
+#define COEFFS 46
+    static const float b[COEFFS] = {-0.000649081282, -0.0009491938209, -0.001361601657, -0.001910785234, -0.002570133495, -0.003251218426, -0.003801634695, -0.004012672882, -0.003636803575, -0.002413585945, -0.0001013597693, 0.003488892085, 0.008461671287, 0.01481127545, 0.02240598045, 0.03098477999, 0.0401679839, 0.04948137286, 0.05839197924, 0.06635211627, 0.07284719662, 0.07744230649, 0.07982251613, 0.07982251613, 0.07744230649, 0.07284719662, 0.06635211627, 0.05839197924, 0.04948137286, 0.0401679839, 0.03098477999, 0.02240598045, 0.01481127545, 0.008461671287, 0.003488892085, -0.0001013597693, -0.002413585945, -0.003636803575, -0.004012672882, -0.003801634695, -0.003251218426, -0.002570133495, -0.001910785234, -0.001361601657, -0.0009491938209, -0.000649081282, };
+
+    static float hist[COEFFS];
+
+    static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
+#undef COEFFS
+
+    return firf(sample, &filter);
+}
 
 static float rssi_filter(int sample)
 {
@@ -391,7 +426,7 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
 
             algo->bitstream = (algo->bitstream << 1) | bit;
 
-            if (count_set_bits((algo->bitstream & ACCESS_CODE_BITMASK) ^ ACCESS_CODE) <= ACCESS_CODE_ERRORS)
+            if (count_set_bits((algo->bitstream & ACCESS_CODE_T1_C1_BITMASK) ^ ACCESS_CODE_T1_C1) <= ACCESS_CODE_T1_C1_ERRORS)
             {
                 bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
             }
@@ -424,30 +459,54 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
 }
 
 
-struct time2_algorithm
+struct time2_algorithm_t1_c1
 {
     uint32_t bitstream;
-    struct t1_c1_packet_decoder_work decoder;
+    struct t1_c1_packet_decoder_work t1_c1_decoder;
 };
 
-
-static void time2_algorithm_reset(struct time2_algorithm *algo)
+static void time2_algorithm_t1_c1_reset(struct time2_algorithm_t1_c1 *algo)
 {
     algo->bitstream = 0;
-    reset_t1_c1_packet_decoder(&algo->decoder);
+    reset_t1_c1_packet_decoder(&algo->t1_c1_decoder);
 }
 
-
-static void time2_algorithm(unsigned bit, unsigned rssi, struct time2_algorithm *algo)
+static void time2_algorithm_t1_c1(unsigned bit, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
 {
+    //fprintf(stdout, "%u\n",bit);
+
     algo->bitstream = (algo->bitstream << 1) | bit;
 
-    if (count_set_bits((algo->bitstream & ACCESS_CODE_BITMASK) ^ ACCESS_CODE) <= ACCESS_CODE_ERRORS)
+    if (count_set_bits((algo->bitstream & ACCESS_CODE_T1_C1_BITMASK) ^ ACCESS_CODE_T1_C1) <= ACCESS_CODE_T1_C1_ERRORS)
     {
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
     }
+    t1_c1_packet_decoder(bit, rssi, &algo->t1_c1_decoder, "t2a;");
+}
 
-    t1_c1_packet_decoder(bit, rssi, &algo->decoder, "t2a;");
+struct time2_algorithm_s1
+{
+    uint32_t bitstream;
+    struct s1_packet_decoder_work s1_decoder;
+};
+
+static void time2_algorithm_s1_reset(struct time2_algorithm_s1 *algo)
+{
+    algo->bitstream = 0;
+    reset_s1_packet_decoder(&algo->s1_decoder);
+}
+
+static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorithm_s1 *algo)
+{
+    //fprintf(stdout, "%u\n",bit);
+
+    algo->bitstream = (algo->bitstream << 1) | bit;
+
+    if (count_set_bits((algo->bitstream & ACCESS_CODE_S1_BITMASK) ^ ACCESS_CODE_S1) <= ACCESS_CODE_S1_ERRORS)
+    {
+        bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+    }
+    s1_packet_decoder(bit, rssi, &algo->s1_decoder, "t2a;");
 }
 
 
@@ -455,7 +514,8 @@ static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
 static unsigned opts_decimation_rate = 2u;
 int opts_show_used_algorithm = 0;
-static const unsigned opts_CLOCK_LOCK_THRESHOLD = 2;
+static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2;
+static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2;
 
 
 static void print_usage(const char *program_name)
@@ -518,11 +578,14 @@ int main(int argc, char *argv[])
     __attribute__((__aligned__(16))) uint8_t samples[4096];
     float i = 0, q = 0;
     unsigned decimation_rate_index = 0;
-    int16_t old_clock = INT16_MIN;
-    unsigned clock_lock = 0;
+    int16_t old_clock_t1_c1 = INT16_MIN, old_clock_s1 = INT16_MIN;
+    unsigned clock_lock_t1_c1 = 0, clock_lock_s1 = 0;
 
-    struct time2_algorithm t2_algo;
-    time2_algorithm_reset(&t2_algo);
+    struct time2_algorithm_t1_c1 t2_algo_t1_c1;
+    time2_algorithm_t1_c1_reset(&t2_algo_t1_c1);
+
+    struct time2_algorithm_s1 t2_algo_s1;
+    time2_algorithm_s1_reset(&t2_algo_s1);
 
     struct runlength_algorithm rl_algo;
     runlength_algorithm_reset(&rl_algo);
@@ -531,6 +594,7 @@ int main(int argc, char *argv[])
     //FILE *input = fopen("samples/kamstrup.bin", "rb");
     //FILE *input = fopen("samples/c1_mode_b.bin", "rb");
     //FILE *input = fopen("samples/t1_c1a_mixed.bin", "rb");
+    //FILE *input = fopen("samples/s1_samples.bin", "rb");
     //FILE *input = get_net("localhost", 14423);
     FILE *input = stdin;
 
@@ -543,7 +607,7 @@ int main(int argc, char *argv[])
     //FILE *demod_out = fopen("demod.bin", "wb");
     //FILE *demod_out2 = fopen("demod.bin", "wb");
     //FILE *clock_out = fopen("clock.bin", "wb");
-    //FILE *bits_out= fopen("bits.bin", "wb");
+    //FILE *bits_out = fopen("bits.bin", "wb");
     //FILE *rawbits_out = fopen("rawbits.bin", "wb");
 
     while (!feof(input))
@@ -593,17 +657,19 @@ int main(int argc, char *argv[])
             decimation_rate_index = 0;
 
             // Demodulate.
-            float delta_phi = polar_discriminator(i, q);
+            const float _delta_phi = polar_discriminator(i, q);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
             // Post-filtering to prevent bit errors because of signal jitter.
-            delta_phi = lp_fir_butter_800kHz_100kHz_10kHz(delta_phi);
+            const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi);
+            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
             // Get the bit!
-            unsigned bit = (delta_phi >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
+            unsigned bit_t1_c1 = (delta_phi_t1_c1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
+            unsigned bit_s1 = (delta_phi_s1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
             //int16_t u = bit ? (INT16_MAX-1) : 0;
             //fwrite(&u, sizeof(u), 1, rawbits_out);
 
@@ -623,7 +689,7 @@ int main(int argc, char *argv[])
             // --- runlength algorithm section begin ---
             if (opts_run_length_algorithm_enabled)
             {
-                runlength_algorithm(bit, rssi, &rl_algo);
+                runlength_algorithm(bit_t1_c1, rssi, &rl_algo);
             }
             // --- runlength algorithm section end ---
 
@@ -636,28 +702,51 @@ int main(int argc, char *argv[])
                 // tuned close to the symbol rate. Saturating band-pass output produces a
                 // rectangular pulses with the required timing information.
                 // Clock-Signal is crossing zero in half period.
-                const int16_t clock = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi * delta_phi) >= 0) ? INT16_MAX : INT16_MIN;
+                const int16_t clock_t1_c1 = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi_t1_c1 * delta_phi_t1_c1) >= 0) ? INT16_MAX : INT16_MIN;
+                const int16_t clock_s1 = (bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(delta_phi_s1 * delta_phi_s1) >= 0) ? INT16_MAX : INT16_MIN;
                 //fwrite(&clock, sizeof(clock), 1, clock_out);
 
-                if (clock > old_clock)
+                if (clock_t1_c1 > old_clock_t1_c1)
                 {   // Clock signal rising edge detected.
-                    clock_lock = 1;
+                    clock_lock_t1_c1 = 1;
                 }
-                else if (clock == INT16_MAX)
+                else if (clock_t1_c1 == INT16_MAX)
                 {   // Clock signal is still high.
-                    if (clock_lock < opts_CLOCK_LOCK_THRESHOLD)
-                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD - 1) clock bits
+                    if (clock_lock_t1_c1 < opts_CLOCK_LOCK_THRESHOLD_T1_C1)
+                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_T1_C1 - 1) clock bits
                         // to get closer to the middle of the data bit.
-                        clock_lock++;
+                        clock_lock_t1_c1++;
                     }
-                    else if (clock_lock == opts_CLOCK_LOCK_THRESHOLD)
-                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD clock bit position.
-                        clock_lock++;
-                        time2_algorithm(bit, rssi, &t2_algo);
-                        //fwrite(&bit, sizeof(bit), 1, bits_out);
+                    else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
+                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
+                        clock_lock_t1_c1++;
+                        time2_algorithm_t1_c1(bit_t1_c1, rssi, &t2_algo_t1_c1);
+                        //int16_t u = bit ? (INT16_MAX-1) : 0;
+                        //fwrite(&u, sizeof(u), 1, bits_out);
                     }
                 }
-                old_clock = clock;
+                old_clock_t1_c1 = clock_t1_c1;
+
+                if (clock_s1 > old_clock_s1)
+                {   // Clock signal rising edge detected.
+                    clock_lock_s1 = 1;
+                }
+                else if (clock_s1 == INT16_MAX)
+                {   // Clock signal is still high.
+                    if (clock_lock_s1 < opts_CLOCK_LOCK_THRESHOLD_S1)
+                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_S1 - 1) clock bits
+                        // to get closer to the middle of the data bit.
+                        clock_lock_s1++;
+                    }
+                    else if (clock_lock_s1 == opts_CLOCK_LOCK_THRESHOLD_S1)
+                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD_S1 clock bit position.
+                        clock_lock_s1++;
+                        time2_algorithm_s1(bit_s1, rssi, &t2_algo_s1);
+                        //int16_t u = bit ? (INT16_MAX-1) : 0;
+                        //fwrite(&u, sizeof(u), 1, bits_out);
+                    }
+                }
+                old_clock_s1 = clock_s1;
                 // --- clock recovery section end ---
             }
             // --- time2 algorithm section end ---

@@ -76,6 +76,9 @@ Redefining CFLAGS and OUTPUT directory is allowed now (patch sent by dwrobel).
 L(ength) field from C1 mode B datagrams does not include CRC bytes anymore: L field will now be printed as if the datagram
 would be received from a T1 or C1 mode A meter.
 
+Significantly improved C1 receiver quality. Sad, but in the low-pass-filter was a bug: the stopband edge frequency was specified as 10kHz instead of 110kHz.
+I have changed the latter to 160kHz and recalculated filter coefficients.
+
    Improvements
    -----
 A new method for picking datagrams out of the bit stream that _could_ probably better perform in C1 mode has been implemented.
@@ -92,6 +95,11 @@ You can play with arguments and check which method performs better for you. Plea
 An additional method introduces more calculation steps, so I'm not sure if Raspberry Pi 1 will still do.
 
 Run length algorithm works well with a few mode C1 devices I had around me, but can still be improved with your help.
+
+S1 mode datagrams can now be received! You have to start rtl_wmbus at 868.3MHz with
+* rtl_sdr -f 868.3M -s 1600000 - 2>/dev/null | build/rtl_wmbus
+
+time2 clock recovery method has to be activated in this case (it's active by default). It works very well because of Manchester coding.
 
   License
   -------
