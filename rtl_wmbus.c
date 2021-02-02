@@ -43,7 +43,7 @@ static const uint32_t ACCESS_CODE = 0b0101010101010000111101u;
 static const uint32_t ACCESS_CODE_BITMASK = 0x3FFFFFu;
 static const unsigned ACCESS_CODE_ERRORS = 1u; // 0 if no errors allowed
 
-/* deglitch_filter has been calculated by Python script as follows.
+/* deglitch_filter has been calculated by a Python script as follows.
    The filter is counting "1" among 7 bits and saying "1" if count("1") >= 3 else "0".
    Notice here count("1") >= 3. (More intuitive in that case would be count("1") >= 3.5.)
    That forces the filter to put more "1" than "0" on the output, because RTL-SDR streams
@@ -82,6 +82,7 @@ static const uint8_t deglitch_filter[128] =
     1,1,1,1,1,1,1,1,
     1,1,1,1,1,1,1,1
 };
+
 
 static float lp_1600kHz_56kHz(int sample, size_t i_or_q)
 {
@@ -334,6 +335,7 @@ struct runlength_algorithm
     struct t1_c1_packet_decoder_work decoder;
 };
 
+
 static void runlength_algorithm_reset(struct runlength_algorithm *algo)
 {
     algo->run_length = 0;
@@ -344,6 +346,7 @@ static void runlength_algorithm_reset(struct runlength_algorithm *algo)
     algo->bitstream = 0;
     reset_t1_c1_packet_decoder(&algo->decoder);
 }
+
 
 static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlength_algorithm *algo)
 {
@@ -406,7 +409,7 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
         #endif
 
         // Some kind of PI controller is implemented below: u[n] = u[n-1] + Kp * e[n] + Ki * sum(e[0..n]).
-        // Kp and Ki were found by experiment; e[n] := algo->run_length
+        // Kp and Ki were found by experiment; e[n] := algo->run_length; u[[n] is the new bit length; u[n-1] is the last known bit length
         algo->cum_run_length_error += algo->run_length; // sum(e[0..n])
         #define PI_KP  32
         #define PI_KI  16
@@ -420,17 +423,20 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
     }
 }
 
+
 struct time2_algorithm
 {
     uint32_t bitstream;
     struct t1_c1_packet_decoder_work decoder;
 };
 
+
 static void time2_algorithm_reset(struct time2_algorithm *algo)
 {
     algo->bitstream = 0;
     reset_t1_c1_packet_decoder(&algo->decoder);
 }
+
 
 static void time2_algorithm(unsigned bit, unsigned rssi, struct time2_algorithm *algo)
 {
@@ -444,10 +450,13 @@ static void time2_algorithm(unsigned bit, unsigned rssi, struct time2_algorithm 
     t1_c1_packet_decoder(bit, rssi, &algo->decoder, "t2a;");
 }
 
+
 static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
-static unsigned decimation_rate = 2u;
-int show_used_algorithm = 0;
+static unsigned opts_decimation_rate = 2u;
+int opts_show_used_algorithm = 0;
+static const unsigned opts_CLOCK_LOCK_THRESHOLD = 2;
+
 
 static void print_usage(const char *program_name)
 {
@@ -457,6 +466,7 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
     fprintf(stdout, "\t-s show used algorithm in the output\n");
 }
+
 
 static void process_options(int argc, char *argv[])
 {
@@ -489,10 +499,10 @@ static void process_options(int argc, char *argv[])
             }
             break;
         case 'd':
-            decimation_rate = strtoul(optarg, NULL, 10);
+            opts_decimation_rate = strtoul(optarg, NULL, 10);
             break;
         case 's':
-            show_used_algorithm = 1;
+            opts_show_used_algorithm = 1;
             break;
         default:
             print_usage(argv[0]);
@@ -504,14 +514,6 @@ static void process_options(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     process_options(argc, argv);
-
-    // --- parameter section begin ---
-    // The idea behind the variables in the section is to make parameters
-    // configurable via command line.
-    const unsigned CLOCK_LOCK_THRESHOLD = 2;
-
-
-    // --- parameter section end ---
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
     float i = 0, q = 0;
@@ -587,7 +589,7 @@ int main(int argc, char *argv[])
 #endif
 
             ++decimation_rate_index;
-            if (decimation_rate_index < decimation_rate) continue;
+            if (decimation_rate_index < opts_decimation_rate) continue;
             decimation_rate_index = 0;
 
             // Demodulate.
@@ -605,46 +607,60 @@ int main(int argc, char *argv[])
             //int16_t u = bit ? (INT16_MAX-1) : 0;
             //fwrite(&u, sizeof(u), 1, rawbits_out);
 
+
             // --- rssi filtering section begin ---
             // We are using one simple filter to rssi value in order to
             // prevent unexpected "splashes" in signal power.
             float rssi = sqrtf(i*i + q*q);
             rssi = rssi_filter(rssi); // comment out, if rssi filtering is unwanted
 #if defined(USE_MOVING_AVERAGE)
-            // If using moving average, we would have doubles of each of i- and q- signal components.
-            rssi /= decimation_rate;
+            // If using moving average, we would have multiples of I- and Q- signal components.
+            rssi /= opts_decimation_rate;
 #endif
             // --- rssi filtering section end ---
 
+
             // --- runlength algorithm section begin ---
-            if (opts_run_length_algorithm_enabled) runlength_algorithm(bit, rssi, &rl_algo);
+            if (opts_run_length_algorithm_enabled)
+            {
+                runlength_algorithm(bit, rssi, &rl_algo);
+            }
             // --- runlength algorithm section end ---
 
-            // --- clock recovery section begin ---
-            // The time-2 method is implemented: push squared signal through a bandpass
-            // tuned close to the symbol rate. Saturating band-pass output produces a
-            // rectangular pulses with the required timing information.
-            // Clock-Signal is crossing zero in half period.
-            const int16_t clock = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi * delta_phi) >= 0) ? INT16_MAX : INT16_MIN;
-            //fwrite(&clock, sizeof(clock), 1, clock_out);
 
-            if (clock > old_clock)   // rising edge
+            // --- time2 algorithm section begin ---
+            if (opts_time2_algorithm_enabled) 
             {
-                clock_lock = 1;
-            }
-            else if (old_clock == clock && clock_lock < CLOCK_LOCK_THRESHOLD)
-            {
-                clock_lock++;
-            }
-            else if (clock_lock == CLOCK_LOCK_THRESHOLD)     // sample data bit on CLOCK_LOCK_THRESHOLD after rose up
-            {
-                clock_lock++;
+                // --- clock recovery section begin ---
+                // The time-2 method is implemented: push squared signal through a bandpass
+                // tuned close to the symbol rate. Saturating band-pass output produces a
+                // rectangular pulses with the required timing information.
+                // Clock-Signal is crossing zero in half period.
+                const int16_t clock = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi * delta_phi) >= 0) ? INT16_MAX : INT16_MIN;
+                //fwrite(&clock, sizeof(clock), 1, clock_out);
 
-                //fwrite(&bit, sizeof(bit), 1, bits_out);
-                if (opts_time2_algorithm_enabled) time2_algorithm(bit, rssi, &t2_algo);
+                if (clock > old_clock)
+                {   // Clock signal rising edge detected.
+                    clock_lock = 1;
+                }
+                else if (clock == INT16_MAX)
+                {   // Clock signal is still high.
+                    if (clock_lock < opts_CLOCK_LOCK_THRESHOLD)
+                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD - 1) clock bits
+                        // to get closer to the middle of the data bit.
+                        clock_lock++;
+                    }
+                    else if (clock_lock == opts_CLOCK_LOCK_THRESHOLD)
+                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD clock bit position.
+                        clock_lock++;
+                        time2_algorithm(bit, rssi, &t2_algo);
+                        //fwrite(&bit, sizeof(bit), 1, bits_out);
+                    }
+                }
+                old_clock = clock;
+                // --- clock recovery section end ---
             }
-            old_clock = clock;
-            // --- clock recovery section end ---
+            // --- time2 algorithm section end ---
 
 #if defined(USE_MOVING_AVERAGE)
             i = q = 0;
