@@ -9,7 +9,13 @@ Rp = 1;
 Rs = 40;
 
 [n, Wc] = buttord(Wp1, Ws1, Rp, Rs);
-[b] = fir1(n, Wc);
+[h] = fir1(n, Wc);
 
-print_fir_filter_coef(b);
+f_delta = 50e3;
+h_length = length(h);
+h_new = h.*cos(2*pi*f_delta*[0:h_length-1]/samplerate);
+
+print_fir_filter_coef(h);
+print_fir_filter_coef(h_new);
+
 

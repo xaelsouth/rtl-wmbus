@@ -124,6 +124,7 @@ static inline float lp_fir_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_
 {
 #define COEFFS 23
     static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
+    //static const float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
 
     static float i_hist[COEFFS] = {};
     static float q_hist[COEFFS] = {};
@@ -316,9 +317,9 @@ static inline float polar_discriminator(float i, float q)
     const float complex s = i + q * _Complex_I;
     const float complex y = s * conj(s_last);
 
-#if 0
+#if 1
     const float delta_phi = atan2_libm(y);
-#elif 1
+#elif 0
     const float delta_phi = atan2_approximation(y);
 #else
     const float delta_phi = atan2_approximation2(y);
@@ -630,7 +631,7 @@ int main(int argc, char *argv[])
             // The sample rate decimation is realised as sum over i and q,
             // which must not be divided by decimation factor before
             // demodulating (atan2(q,i)).
-#if 0
+#if 1
             i = lp_fir_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
             q = lp_fir_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
 #elif 0
