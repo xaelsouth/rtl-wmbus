@@ -23,7 +23,7 @@
  * SUCH DAMAGE.
  */
 
-#include <getopt.h> 
+#include <getopt.h>
 #include <stdint.h>
 #include <limits.h>
 #include <stddef.h>
@@ -47,7 +47,7 @@ static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
 
 static const uint32_t ACCESS_CODE_S1 = 0b000111011010010110u;
 static const uint32_t ACCESS_CODE_S1_BITMASK = 0x3FFFFu;
-static const unsigned ACCESS_CODE_S1_ERRORS = 0u; // 0 if no errors allowed
+static const unsigned ACCESS_CODE_S1_ERRORS = 1u; // 0 if no errors allowed
 
 
 /* deglitch_filter has been calculated by a Python script as follows.
@@ -91,7 +91,7 @@ static const uint8_t deglitch_filter[128] =
 };
 
 
-static float lp_1600kHz_56kHz(int sample, size_t i_or_q)
+static float lp_1600kHz_56kHz(float sample, size_t i_or_q)
 {
     static float moving_average[2];
 
@@ -103,7 +103,7 @@ static float lp_1600kHz_56kHz(int sample, size_t i_or_q)
 }
 
 
-static inline float moving_average(int sample, size_t i_or_q)
+static inline float moving_average_t1_c1(float sample, size_t i_or_q)
 {
 #define COEFFS 12
     static int i_hist[COEFFS];
@@ -119,8 +119,23 @@ static inline float moving_average(int sample, size_t i_or_q)
     return mavgi(sample, &filter[i_or_q]);
 }
 
+static inline float moving_average_s1(float sample, size_t i_or_q)
+{
+#define COEFFS 12
+    static int i_hist[COEFFS];
+    static int q_hist[COEFFS];
 
-static inline float lp_fir_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_q)
+    static MAVGI_FILTER filter[2] =                                         // i/q
+    {
+        {.length = COEFFS, .hist = i_hist}, //  0
+        {.length = COEFFS, .hist = q_hist}  //  1
+    };
+#undef COEFFS
+
+    return mavgi(sample, &filter[i_or_q]);
+}
+
+static inline float lp_fir_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
 {
 #define COEFFS 23
     static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
@@ -140,7 +155,7 @@ static inline float lp_fir_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_
 }
 
 
-static inline float lp_firfp_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_q)
+static inline float lp_firfp_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
 {
 #define COEFFS 23
     static const fixedpt b[COEFFS] = {fixedpt_rconst(0.000140535927),  fixedpt_rconst(1.102280392e-05), fixedpt_rconst(0.0001309279731), fixedpt_rconst(0.001356012537), fixedpt_rconst(0.00551787474),
@@ -163,7 +178,7 @@ static inline float lp_firfp_butter_1600kHz_160kHz_200kHz(int sample, size_t i_o
 }
 
 
-static inline float lp_ppf_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_q)
+static inline float lp_ppf_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
 {
 #define PHASES 2
 #define COEFFS 12
@@ -202,7 +217,7 @@ static inline float lp_ppf_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_
 }
 
 
-static inline float lp_ppffp_butter_1600kHz_160kHz_200kHz(int sample, size_t i_or_q)
+static inline float lp_ppffp_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
 {
 #define PHASES 2
 #define COEFFS 12
@@ -263,9 +278,9 @@ static inline float bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(float sample)
     static const float b[3*SECTIONS] = {1, 1.999994187, 0.9999941867, 1, -1.999994026,0.9999940262, 1, -1.605750097e-07, -1.000011787, };
     static const float a[3*SECTIONS] = {1, -1.92151475, 0.9918135499, 1, -1.922481015,0.984593497, 1, -1.937432099, 0.9927241336, };
     static float hist[3*SECTIONS] = {};
-    
+
     static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist};
-    
+
 #undef SECTIONS
 #undef GAIN
 
@@ -299,7 +314,7 @@ static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
     return firf(sample, &filter);
 }
 
-static float rssi_filter(int sample)
+static float rssi_filter(float sample)
 {
     static float old_sample;
 
@@ -311,7 +326,7 @@ static float rssi_filter(int sample)
 }
 
 
-static inline float polar_discriminator(float i, float q)
+static inline float polar_discriminator_t1_c1(float i, float q)
 {
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
@@ -330,6 +345,24 @@ static inline float polar_discriminator(float i, float q)
     return delta_phi;
 }
 
+static inline float polar_discriminator_s1(float i, float q)
+{
+    static float complex s_last;
+    const float complex s = i + q * _Complex_I;
+    const float complex y = s * conj(s_last);
+
+#if 1
+    const float delta_phi = atan2_libm(y);
+#elif 0
+    const float delta_phi = atan2_approximation(y);
+#else
+    const float delta_phi = atan2_approximation2(y);
+#endif
+
+    s_last = s;
+
+    return delta_phi;
+}
 
 /** @brief Sparse Ones runs in time proportional to the number
  *         of 1 bits.
@@ -514,6 +547,7 @@ static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorit
 static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
 static unsigned opts_decimation_rate = 2u;
+static int opts_s1_t1_c1_simultaneously = 0;
 int opts_show_used_algorithm = 0;
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2;
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2;
@@ -525,7 +559,8 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
-    fprintf(stdout, "\t-s show used algorithm in the output\n");
+    fprintf(stdout, "\t-v show used algorithm in the output\n");
+    fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdt _MUST_ be set to 868.7MHz\n");
 }
 
 
@@ -533,7 +568,7 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "d:r:st:")) != -1)
+    while ((option = getopt(argc, argv, "d:r:vst:")) != -1)
     {
         switch (option)
         {
@@ -563,6 +598,9 @@ static void process_options(int argc, char *argv[])
             opts_decimation_rate = strtoul(optarg, NULL, 10);
             break;
         case 's':
+            opts_s1_t1_c1_simultaneously = 1;
+            break;
+        case 'v':
             opts_show_used_algorithm = 1;
             break;
         default:
@@ -572,12 +610,111 @@ static void process_options(int argc, char *argv[])
     }
 }
 
+static float complex *LUT_FREQUENCY_TRANSLATION_PLUS = NULL;
+static float complex *LUT_FREQUENCY_TRANSLATION_MINUS = NULL;
+#define FREQ_STEP_KHZ (50)
+
+/* fs_kHz is the sample rate in kHz. */
+void setup_lookup_tables_for_frequency_translation(int fs_kHz)
+{
+    const int ft_kHz = FREQ_STEP_KHZ;
+    const size_t n_max = fs_kHz/ft_kHz;
+
+    free(LUT_FREQUENCY_TRANSLATION_PLUS);
+    LUT_FREQUENCY_TRANSLATION_PLUS = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_PLUS[0]));
+    if (!LUT_FREQUENCY_TRANSLATION_PLUS) exit(EXIT_FAILURE);
+
+    free(LUT_FREQUENCY_TRANSLATION_MINUS);
+    LUT_FREQUENCY_TRANSLATION_MINUS = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_MINUS[0]));
+    if (!LUT_FREQUENCY_TRANSLATION_MINUS) exit(EXIT_FAILURE);
+
+    for (size_t n = 0; n < n_max; n++)
+    {
+        const double phi = (2. * M_PI * (ft_kHz * n)) / fs_kHz;
+        const float a = cosf(phi);
+        const float b = sinf(phi);
+        LUT_FREQUENCY_TRANSLATION_PLUS[n] = a - b * _Complex_I;
+        LUT_FREQUENCY_TRANSLATION_MINUS[n] = a + b * _Complex_I;
+    }
+}
+
+/* Positive frequencies shift: ft = 50kHz the signal will shift from 868.9M right to 868.95M. */
+static void shift_freq_50(float *i, float *q, int fs_kHz)
+{
+    const int ft = 50;
+    static size_t n = 0;
+    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
+    #if 0
+    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) - sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
+    n++;
+    #else
+    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_PLUS[n];
+    n += ft/FREQ_STEP_KHZ;
+    #endif
+    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
+    if (n >= n_max) n = 0;
+
+    float complex s = (*i) + (*q) * _Complex_I;
+    s = s * freq_shift;
+
+    *i = crealf(s);
+    *q = cimagf(s);
+}
+
+/* Positive frequencies shift: ft = 200kHz the signal will shift from 868.7M right to 868.9M. */
+static void shift_freq_200(float *i, float *q, int fs_kHz)
+{
+    const int ft = 200;
+    static size_t n = 0;
+    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
+    #if 0
+    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) - sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
+    n++;
+    #else
+    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_PLUS[n];
+    n += ft/FREQ_STEP_KHZ;
+    #endif
+    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
+    if (n >= n_max) n = 0;
+
+    float complex s = (*i) + (*q) * _Complex_I;
+    s = s * freq_shift;
+
+    *i = crealf(s);
+    *q = cimagf(s);
+}
+
+/* Negative frequencies shift: ft = 400kHz the signal will shift from 868.7M right to 868.3M. */
+static void shift_freq_minus400(float *i, float *q, int fs_kHz)
+{
+    const int ft = 400;
+    static size_t n = 0;
+    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
+    #if 0
+    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) + sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
+    n++;
+    #else
+    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_MINUS[n];
+    n += ft/FREQ_STEP_KHZ;
+    #endif
+    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
+    if (n >= n_max) n = 0;
+
+    float complex s = (*i) + (*q) * _Complex_I;
+    s = s * freq_shift;
+
+    *i = crealf(s);
+    *q = cimagf(s);
+}
+
 int main(int argc, char *argv[])
 {
     process_options(argc, argv);
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
-    float i = 0, q = 0;
+    const int fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
+    float i_t1_c1 = 0, q_t1_c1 = 0;
+    float i_s1 = 0, q_s1 = 0;
     unsigned decimation_rate_index = 0;
     int16_t old_clock_t1_c1 = INT16_MIN, old_clock_s1 = INT16_MIN;
     unsigned clock_lock_t1_c1 = 0, clock_lock_s1 = 0;
@@ -591,13 +728,13 @@ int main(int argc, char *argv[])
     struct runlength_algorithm rl_algo;
     runlength_algorithm_reset(&rl_algo);
 
-    //FILE *input = fopen("samples/samples2.bin", "rb");
-    //FILE *input = fopen("samples/kamstrup.bin", "rb");
-    //FILE *input = fopen("samples/c1_mode_b.bin", "rb");
-    //FILE *input = fopen("samples/t1_c1a_mixed.bin", "rb");
-    //FILE *input = fopen("samples/s1_samples.bin", "rb");
-    //FILE *input = get_net("localhost", 14423);
     FILE *input = stdin;
+    //input = fopen("samples/samples2.bin", "rb");
+    //input = fopen("samples/kamstrup.bin", "rb");
+    //input = fopen("samples/c1_mode_b.bin", "rb");
+    //input = fopen("samples/t1_c1a_mixed.bin", "rb");
+    //input = fopen("samples/s1_samples.bin", "rb");
+    //input = get_net("localhost", 14423);
 
     if (input == NULL)
     {
@@ -611,6 +748,8 @@ int main(int argc, char *argv[])
     //FILE *bits_out = fopen("bits.bin", "wb");
     //FILE *rawbits_out = fopen("rawbits.bin", "wb");
 
+    setup_lookup_tables_for_frequency_translation(fs_kHz);
+
     while (!feof(input))
     {
         size_t read_items = fread(samples, sizeof(samples), 1, input);
@@ -622,8 +761,25 @@ int main(int argc, char *argv[])
 
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
         {
-            const int i_unfilt = ((int)samples[k]     - 127);
-            const int q_unfilt = ((int)samples[k + 1] - 127);
+            const float i_unfilt = ((float)samples[k]     - 127.5);
+            const float q_unfilt = ((float)samples[k + 1] - 127.5);
+
+            // rtl_sdr -f 868.35M -s 2400000 - 2>/dev/null | build/rtl_wmbus -d 3
+            //shift_freq(&i_unfilt, &q_unfilt, 600, 2400);
+
+            float i_t1_c1_unfilt = i_unfilt;
+            float q_t1_c1_unfilt = q_unfilt;
+
+            float i_s1_unfilt = i_unfilt;
+            float q_s1_unfilt = q_unfilt;
+
+            if (opts_s1_t1_c1_simultaneously)
+            {
+                shift_freq_200(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
+                shift_freq_50(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
+
+                shift_freq_minus400(&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+            }
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
             // that i and q signals don't contain frequencies above new sample
@@ -631,7 +787,7 @@ int main(int argc, char *argv[])
             // The sample rate decimation is realised as sum over i and q,
             // which must not be divided by decimation factor before
             // demodulating (atan2(q,i)).
-#if 1
+#if 0
             i = lp_fir_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
             q = lp_fir_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
 #elif 0
@@ -648,8 +804,13 @@ int main(int argc, char *argv[])
             q += lp_1600kHz_58kHz(q_unfilt, 1);
 #define USE_MOVING_AVERAGE
 #else
-            i += moving_average(i_unfilt, 0);
-            q += moving_average(q_unfilt, 1);
+            // Moving average can be viewed as a low pass filter.
+
+            i_t1_c1 += moving_average_t1_c1(i_t1_c1_unfilt, 0);
+            q_t1_c1 += moving_average_t1_c1(q_t1_c1_unfilt, 1);
+
+            i_s1 += moving_average_s1(i_s1_unfilt, 0);
+            q_s1 += moving_average_s1(q_s1_unfilt, 1);
 #define USE_MOVING_AVERAGE
 #endif
 
@@ -658,13 +819,14 @@ int main(int argc, char *argv[])
             decimation_rate_index = 0;
 
             // Demodulate.
-            const float _delta_phi = polar_discriminator(i, q);
+            const float _delta_phi_t1_c1 = polar_discriminator_t1_c1(i_t1_c1, q_t1_c1);
+            const float _delta_s1 = polar_discriminator_s1(i_s1, q_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
             // Post-filtering to prevent bit errors because of signal jitter.
-            const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi);
-            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi);
+            const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
+            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
@@ -678,11 +840,15 @@ int main(int argc, char *argv[])
             // --- rssi filtering section begin ---
             // We are using one simple filter to rssi value in order to
             // prevent unexpected "splashes" in signal power.
-            float rssi = sqrtf(i*i + q*q);
-            rssi = rssi_filter(rssi); // comment out, if rssi filtering is unwanted
+            float rssi_t1_c1 = sqrtf(i_t1_c1*i_t1_c1 + q_t1_c1*q_t1_c1);
+            rssi_t1_c1 = rssi_filter(rssi_t1_c1); // comment out, if rssi filtering is unwanted
+
+            float rssi_s1 = sqrtf(i_s1*i_s1 + q_s1*q_s1);
+            rssi_s1 = rssi_filter(rssi_s1); // comment out, if rssi filtering is unwanted
 #if defined(USE_MOVING_AVERAGE)
             // If using moving average, we would have multiples of I- and Q- signal components.
-            rssi /= opts_decimation_rate;
+            rssi_t1_c1 /= opts_decimation_rate;
+            rssi_s1 /= opts_decimation_rate;
 #endif
             // --- rssi filtering section end ---
 
@@ -690,13 +856,13 @@ int main(int argc, char *argv[])
             // --- runlength algorithm section begin ---
             if (opts_run_length_algorithm_enabled)
             {
-                runlength_algorithm(bit_t1_c1, rssi, &rl_algo);
+                runlength_algorithm(bit_t1_c1, rssi_t1_c1, &rl_algo);
             }
             // --- runlength algorithm section end ---
 
 
             // --- time2 algorithm section begin ---
-            if (opts_time2_algorithm_enabled) 
+            if (opts_time2_algorithm_enabled)
             {
                 // --- clock recovery section begin ---
                 // The time-2 method is implemented: push squared signal through a bandpass
@@ -721,7 +887,7 @@ int main(int argc, char *argv[])
                     else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
                     {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
                         clock_lock_t1_c1++;
-                        time2_algorithm_t1_c1(bit_t1_c1, rssi, &t2_algo_t1_c1);
+                        time2_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, &t2_algo_t1_c1);
                         //int16_t u = bit ? (INT16_MAX-1) : 0;
                         //fwrite(&u, sizeof(u), 1, bits_out);
                     }
@@ -742,7 +908,7 @@ int main(int argc, char *argv[])
                     else if (clock_lock_s1 == opts_CLOCK_LOCK_THRESHOLD_S1)
                     {   // Sample data bit at CLOCK_LOCK_THRESHOLD_S1 clock bit position.
                         clock_lock_s1++;
-                        time2_algorithm_s1(bit_s1, rssi, &t2_algo_s1);
+                        time2_algorithm_s1(bit_s1, rssi_s1, &t2_algo_s1);
                         //int16_t u = bit ? (INT16_MAX-1) : 0;
                         //fwrite(&u, sizeof(u), 1, bits_out);
                     }
@@ -753,11 +919,15 @@ int main(int argc, char *argv[])
             // --- time2 algorithm section end ---
 
 #if defined(USE_MOVING_AVERAGE)
-            i = q = 0;
+            i_t1_c1 = q_t1_c1 = 0;
+            i_s1 = q_s1 = 0;
 #endif
         }
     }
 
+    if (input != stdin) fclose(input);
+    free(LUT_FREQUENCY_TRANSLATION_PLUS);
+    free(LUT_FREQUENCY_TRANSLATION_MINUS);
     return EXIT_SUCCESS;
 }
 
