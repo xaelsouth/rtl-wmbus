@@ -54,12 +54,12 @@ To run continuously with rx_sdr (or even with a higher sampling and decimation r
  * rx_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
  * rx_sdr -f 868.95M -s 4000000 - 2>/dev/null | build/rtl_wmbus -d 5
 
-Notice "-d 3" in the last line: it's a multiple of 800kHz resulting from the sample rate of 4000000.
+Notice "-d 5" in the last line: it's a multiple of 800kHz resulting from the sample rate of 4000000.
 
 To count "good" (no 3 out of 6 errors, no checksum errors) packets:
  * cat samples.bin | build/rtl_wmbus 2>/dev/null | grep "[T,C,S]1;1;1" | wc -l
 
-Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s should be used or an a multiple of 800kHz.
+Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s should be used or use a multiple of 800kHz. RTL-SDR supports sampling frequencies up to 3.2MSaples, so you use 1.6MSamples, 2.4MSamples or 3.2Msamples.
 
 See samples/samples2.bin for a live example with two T1 mode devices inside.
 
@@ -105,10 +105,10 @@ Notice in the last line
  * "868.7M": the new frequency to receive at.
 
 rtl_wmbus will then shift all frequencies
- * by 250kHz to new center frequency at and 868.95Mhz (T1, C1)
- * by 400kHz to new center frequency and 868.3Mhz (S1)
+ * by 250kHz to new center frequency at 868.95Mhz (T1 and C1)
+ * by 400kHz to new center frequency at 868.3Mhz (S1)
 
-I have tested that so far and can confirm that it works for T1/C1, but can't test for S1 as I have no such meter.
+I have tested this so far and can confirm that it works for T1/C1, but can't test for S1 as I have no such meter.
 
   License
   -------
