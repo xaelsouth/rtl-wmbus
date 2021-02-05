@@ -1,0 +1,1 @@
+The sample rate of all recordings is 1.6Msamples if nothing else is mentioned in the filename.
