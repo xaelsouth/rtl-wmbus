@@ -135,7 +135,7 @@ static inline float moving_average_s1(float sample, size_t i_or_q)
     return mavgi(sample, &filter[i_or_q]);
 }
 
-static inline float lp_fir_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
+static inline float lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(float sample, size_t i_or_q)
 {
 #define COEFFS 23
     static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
@@ -154,6 +154,24 @@ static inline float lp_fir_butter_1600kHz_160kHz_200kHz(float sample, size_t i_o
     return firf(sample, &filter[i_or_q]);
 }
 
+static inline float lp_fir_butter_1600kHz_160kHz_200kHz_s1(float sample, size_t i_or_q)
+{
+#define COEFFS 23
+    static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
+    //static const float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
+
+    static float i_hist[COEFFS] = {};
+    static float q_hist[COEFFS] = {};
+
+    static FIRF_FILTER filter[2] =                                                 // i/q
+    {
+        {.length = COEFFS, .b = b, .hist = i_hist}, //  0
+        {.length = COEFFS, .b = b, .hist = q_hist}  //  1
+    };
+#undef COEFFS
+
+    return firf(sample, &filter[i_or_q]);
+}
 
 static inline float lp_firfp_butter_1600kHz_160kHz_200kHz(float sample, size_t i_or_q)
 {
@@ -638,10 +656,10 @@ void setup_lookup_tables_for_frequency_translation(int fs_kHz)
     }
 }
 
-/* Positive frequencies shift: ft = 50kHz the signal will shift from 868.9M right to 868.95M. */
-static void shift_freq_50(float *i, float *q, int fs_kHz)
+/* Positive frequencies shift: ft = 250kHz the signal will shift from 868.7M right to 868.95M. */
+static void shift_freq_250(float *i, float *q, int fs_kHz)
 {
-    const int ft = 50;
+    const int ft = 250;
     static size_t n = 0;
     const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
     #if 0
@@ -652,30 +670,7 @@ static void shift_freq_50(float *i, float *q, int fs_kHz)
     n += ft/FREQ_STEP_KHZ;
     #endif
     //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
-    if (n >= n_max) n = 0;
-
-    float complex s = (*i) + (*q) * _Complex_I;
-    s = s * freq_shift;
-
-    *i = crealf(s);
-    *q = cimagf(s);
-}
-
-/* Positive frequencies shift: ft = 200kHz the signal will shift from 868.7M right to 868.9M. */
-static void shift_freq_200(float *i, float *q, int fs_kHz)
-{
-    const int ft = 200;
-    static size_t n = 0;
-    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
-    #if 0
-    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) - sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
-    n++;
-    #else
-    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_PLUS[n];
-    n += ft/FREQ_STEP_KHZ;
-    #endif
-    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
-    if (n >= n_max) n = 0;
+    if (n >= n_max) n -= n_max;
 
     float complex s = (*i) + (*q) * _Complex_I;
     s = s * freq_shift;
@@ -698,7 +693,7 @@ static void shift_freq_minus400(float *i, float *q, int fs_kHz)
     n += ft/FREQ_STEP_KHZ;
     #endif
     //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
-    if (n >= n_max) n = 0;
+    if (n >= n_max) n -= n_max;
 
     float complex s = (*i) + (*q) * _Complex_I;
     s = s * freq_shift;
@@ -756,7 +751,7 @@ int main(int argc, char *argv[])
         if (1 != read_items)
         {
             // End of file?..
-            return 2;
+            break;
         }
 
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
@@ -775,8 +770,7 @@ int main(int argc, char *argv[])
 
             if (opts_s1_t1_c1_simultaneously)
             {
-                shift_freq_200(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
-                shift_freq_50(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
+                shift_freq_250(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
 
                 shift_freq_minus400(&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
             }
@@ -788,8 +782,11 @@ int main(int argc, char *argv[])
             // which must not be divided by decimation factor before
             // demodulating (atan2(q,i)).
 #if 0
-            i = lp_fir_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
-            q = lp_fir_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
+            i_t1_c1 = lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(i_t1_c1_unfilt, 0);
+            q_t1_c1 = lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(q_t1_c1_unfilt, 1);
+
+            i_s1 = lp_fir_butter_1600kHz_160kHz_200kHz_s1(i_s1_unfilt, 0);
+            q_s1 = lp_fir_butter_1600kHz_160kHz_200kHz_s1(q_s1_unfilt, 1);
 #elif 0
             i = lp_ppf_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
             q = lp_ppf_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
