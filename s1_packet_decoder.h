@@ -172,6 +172,7 @@ static void s1_rx_bit2(unsigned bit, struct s1_packet_decoder_work *decoder)
 static void s1_rx_first_lfield_bit(unsigned bit, struct s1_packet_decoder_work *decoder)
 {
     decoder->byte = (bit & PACKET_DATABIT_MASK);
+    decoder->packet_rssi = decoder->current_rssi;
 }
 
 static void s1_rx_last_lfield_bit(unsigned bit, struct s1_packet_decoder_work *decoder)

@@ -69,7 +69,7 @@ The output data is semicolon separated and the meaning of the columns are:
 
 `MODE;CRC_OK;3OUTOF6OK;TIMESTAMP;PACKET_RSSI;CURRENT_RSSI;LINK_LAYER_IDENT_NO;DATAGRAM_WITHOUT_CRC_BYTES.`
 
-3OUTOF6OK is only relevant for T1 and can be ignored for C1 (always set to 1).
+3OUTOF6OK is only relevant for T1 and can be ignored for C1 and S1 (always set to 1).
 
    Bugfixing
    -----
@@ -80,6 +80,8 @@ Redefining CFLAGS and OUTPUT directory is allowed now (patch sent by dwrobel).
 L(ength) field from C1 mode B datagrams does not include CRC bytes anymore: L field will now be printed as if the datagram would be received from a T1 or C1 mode A meter.
 
 Significantly improved C1 receiver quality. Sad, but in the low-pass-filter was a bug: the stopband edge frequency was specified as 10kHz instead of 110kHz. I have changed the latter to 160kHz and recalculated filter coefficients.
+
+Packet rssi value fixed for S1 mode (was always 0): thanks to alalons.
 
    Improvements
    -----
@@ -106,15 +108,15 @@ time2 clock recovery method has to be activated in this case (it's active by def
 Last but not least, you can try to receive all datagrams (S1, T1, C1) _simultaneously_:
  * rtl_sdr -f 868.7M -s 1600000 - 2>/dev/null | build/rtl_wmbus -s
 
-Notice in the last line
+Notice in the last line:
  * "-s": which is needed to inform rtl_wmbus about required frequency translation
- * "868.7M": the new frequency to receive at.
+ * "868.7M": the new frequency to receive at
 
 rtl_wmbus will then shift all frequencies
  * by 250kHz to new center frequency at 868.95Mhz (T1 and C1)
  * by 400kHz to new center frequency at 868.3Mhz (S1)
 
-I have tested this so far and can confirm that it works for T1/C1, but can't test for S1 as I have no such meter.
+I have tested this so far and can confirm that it works for T1/C1 and S1. Thanks to alalons for providing me with bitstreams!
 
   License
   -------

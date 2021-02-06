@@ -332,7 +332,7 @@ static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
     return firf(sample, &filter);
 }
 
-static float rssi_filter(float sample)
+static float rssi_filter_t1_c1(float sample)
 {
     static float old_sample;
 
@@ -343,6 +343,16 @@ static float rssi_filter(float sample)
     return old_sample;
 }
 
+static float rssi_filter_s1(float sample)
+{
+    static float old_sample;
+
+#define ALPHA 0.6789f
+    old_sample = ALPHA*sample + (1.0f - ALPHA)*old_sample;
+#undef ALPHA
+
+    return old_sample;
+}
 
 static inline float polar_discriminator_t1_c1(float i, float q)
 {
@@ -838,10 +848,10 @@ int main(int argc, char *argv[])
             // We are using one simple filter to rssi value in order to
             // prevent unexpected "splashes" in signal power.
             float rssi_t1_c1 = sqrtf(i_t1_c1*i_t1_c1 + q_t1_c1*q_t1_c1);
-            rssi_t1_c1 = rssi_filter(rssi_t1_c1); // comment out, if rssi filtering is unwanted
+            rssi_t1_c1 = rssi_filter_t1_c1(rssi_t1_c1); // comment out, if rssi filtering is unwanted
 
             float rssi_s1 = sqrtf(i_s1*i_s1 + q_s1*q_s1);
-            rssi_s1 = rssi_filter(rssi_s1); // comment out, if rssi filtering is unwanted
+            rssi_s1 = rssi_filter_s1(rssi_s1); // comment out, if rssi filtering is unwanted
 #if defined(USE_MOVING_AVERAGE)
             // If using moving average, we would have multiples of I- and Q- signal components.
             rssi_t1_c1 /= opts_decimation_rate;
