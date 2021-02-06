@@ -160,13 +160,12 @@ static void s1_rx_bit2(unsigned bit, struct s1_packet_decoder_work *decoder)
     if (b == 0xFFu)
     {
         reset_s1_packet_decoder(decoder);
+        return;
     }
-    else
-    {
-        decoder->byte >>= 2;
-        decoder->byte <<= 1;
-        decoder->byte |= b;
-    }
+
+    decoder->byte >>= 2;
+    decoder->byte <<= 1;
+    decoder->byte |= b;
 }
 
 static void s1_rx_first_lfield_bit(unsigned bit, struct s1_packet_decoder_work *decoder)
@@ -185,13 +184,12 @@ static void s1_rx_last_lfield_bit(unsigned bit, struct s1_packet_decoder_work *d
     if (b == 0xFFu)
     {
         reset_s1_packet_decoder(decoder);
+        return;
     }
-    else
-    {
-        decoder->byte >>= 2;
-        decoder->byte <<= 1;
-        decoder->byte |= b;
-    }
+
+    decoder->byte >>= 2;
+    decoder->byte <<= 1;
+    decoder->byte |= b;
 
     decoder->L = decoder->byte;
     decoder->l = 0;
@@ -214,13 +212,12 @@ static void s1_rx_last_data_bit(unsigned bit, struct s1_packet_decoder_work *dec
     if (b == 0xFFu)
     {
         reset_s1_packet_decoder(decoder);
+        return;
     }
-    else
-    {
-        decoder->byte >>= 2;
-        decoder->byte <<= 1;
-        decoder->byte |= b;
-    }
+
+    decoder->byte >>= 2;
+    decoder->byte <<= 1;
+    decoder->byte |= b;
 
     decoder->packet[decoder->l++] = decoder->byte;
 
