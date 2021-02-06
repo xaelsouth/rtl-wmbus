@@ -65,6 +65,12 @@ See samples/samples2.bin for a live example with two T1 mode devices inside.
 
 On Android the driver must be started first with options given above. I/Q-data goes to a port which is to be set in the driver settings. Use get_net to get I/Q-data into rtl_wmbus.
 
+The output data is semicolon separated and the meaning of the columns are:
+
+`MODE;CRC_OK;3OUTOF6OK;TIMESTAMP;PACKET_RSSI;CURRENT_RSSI;LINK_LAYER_IDENT_NO;DATAGRAM_WITHOUT_CRC_BYTES.`
+
+3OUTOF6OK is only relevant for T1 and can be ignored for C1 (always set to 1).
+
    Bugfixing
    -----
 Mode C1 datagram type B is supported now - thanks to Fredrik Öhrström for spotting this and for providing raw datagram samples. An another thanks goes to Kjell Braden (afflux) and to carlos62 for the idea how to implement this.
@@ -78,7 +84,7 @@ Significantly improved C1 receiver quality. Sad, but in the low-pass-filter was 
    Improvements
    -----
 A new method for picking datagrams out of the bit stream that _could_ probably better perform in C1 mode has been implemented.
-I called that "run length algorithm". I don't know if any similar term already exists in the literature. 
+I called that "run length algorithm". I don't know if any similar term already exists in the literature.
 The new method is very sensitive to bit glitches, which have to be filtered out of the bit stream with an asymmetrical deglitch filter.
 The deglitch filter _must_ be implemented asymmetrical in this case, because RTL-SDR produces more "0" bits than "1" bits on it's output.
 The latter seems more to be a hardware feature rather than a bug.
