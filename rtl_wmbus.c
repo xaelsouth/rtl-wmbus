@@ -588,7 +588,7 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
     fprintf(stdout, "\t-v show used algorithm in the output\n");
-    fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdt _MUST_ be set to 868.7MHz\n");
+    fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.7MHz (-f 868.7M)\n");
 }
 
 
@@ -766,8 +766,8 @@ int main(int argc, char *argv[])
 
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
         {
-            const float i_unfilt = ((float)samples[k]     - 127.5);
-            const float q_unfilt = ((float)samples[k + 1] - 127.5);
+            const float i_unfilt = ((float)samples[k]     - 127.5f);
+            const float q_unfilt = ((float)samples[k + 1] - 127.5f);
 
             // rtl_sdr -f 868.35M -s 2400000 - 2>/dev/null | build/rtl_wmbus -d 3
             //shift_freq(&i_unfilt, &q_unfilt, 600, 2400);
