@@ -574,7 +574,7 @@ static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorit
 
 static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
-static unsigned opts_decimation_rate = 2u;
+static float opts_decimation_rate = 2;
 static int opts_s1_t1_c1_simultaneously = 0;
 int opts_show_used_algorithm = 0;
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2;
@@ -588,7 +588,7 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
     fprintf(stdout, "\t-v show used algorithm in the output\n");
-    fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.7MHz (-f 868.7M)\n");
+    fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdt _MUST_ be set to 868.7MHz\n");
 }
 
 
@@ -623,7 +623,7 @@ static void process_options(int argc, char *argv[])
             }
             break;
         case 'd':
-            opts_decimation_rate = strtoul(optarg, NULL, 10);
+            opts_decimation_rate = strtof(optarg, NULL);
             break;
         case 's':
             opts_s1_t1_c1_simultaneously = 1;
@@ -640,7 +640,7 @@ static void process_options(int argc, char *argv[])
 
 static float complex *LUT_FREQUENCY_TRANSLATION_PLUS = NULL;
 static float complex *LUT_FREQUENCY_TRANSLATION_MINUS = NULL;
-#define FREQ_STEP_KHZ (50)
+#define FREQ_STEP_KHZ (25) //to acomodate symetric filter we need more resolution or maybe use floats
 
 /* fs_kHz is the sample rate in kHz. */
 void setup_lookup_tables_for_frequency_translation(int fs_kHz)
@@ -677,11 +677,13 @@ static void shift_freq_250(float *i, float *q, int fs_kHz)
     n++;
     #else
     const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_PLUS[n];
+    
     n += ft/FREQ_STEP_KHZ;
     #endif
     //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
     if (n >= n_max) n -= n_max;
-
+	
+	
     float complex s = (*i) + (*q) * _Complex_I;
     s = s * freq_shift;
 
@@ -699,7 +701,9 @@ static void shift_freq_minus400(float *i, float *q, int fs_kHz)
     const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) + sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
     n++;
     #else
+    
     const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_MINUS[n];
+    
     n += ft/FREQ_STEP_KHZ;
     #endif
     //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
@@ -712,15 +716,52 @@ static void shift_freq_minus400(float *i, float *q, int fs_kHz)
     *q = cimagf(s);
 }
 
+
+static void shift_freq_plus_minus325(float *iplus, float *qplus,float *iminus, float *qminus, int fs_kHz)
+{
+    const int ft = 325;
+    static size_t n = 0;
+    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
+    #if 0
+    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) + sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
+    n++;
+    #else
+    
+    const float x=crealf(LUT_FREQUENCY_TRANSLATION_PLUS[n]);
+    const float z=cimagf(LUT_FREQUENCY_TRANSLATION_PLUS[n]);
+    
+    n += ft/FREQ_STEP_KHZ;
+    #endif
+    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
+    if (n >= n_max) n -= n_max;
+    float ix,iz,qx,qz; 
+    //(i+Jq)*(x+Jz) =ix-qz+ J(qx+iz) positive rotation
+    //(i+Jq)*(x-Jz) =ix+qz+ J(qx-iz) negative rotation
+    
+	ix=*iplus * x;
+	qx=*qplus * x;
+	iz=*iplus * z;
+	qz=*qplus * z;
+	//simetric negative shift 
+	*iminus=ix+qz; 
+	*qminus=qx-iz;
+	//simetric positive shift 
+	*iplus=ix-qz;
+	*qplus=qx+iz;	
+
+}
+
+
+
 int main(int argc, char *argv[])
 {
     process_options(argc, argv);
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
-    const int fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
+    const float fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
     float i_t1_c1 = 0, q_t1_c1 = 0;
     float i_s1 = 0, q_s1 = 0;
-    unsigned decimation_rate_index = 0;
+    float decimation_rate_index = 0;
     int16_t old_clock_t1_c1 = INT16_MIN, old_clock_s1 = INT16_MIN;
     unsigned clock_lock_t1_c1 = 0, clock_lock_s1 = 0;
 
@@ -766,12 +807,10 @@ int main(int argc, char *argv[])
 
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
         {
-            const float i_unfilt = ((float)samples[k]     - 127.5f);
-            const float q_unfilt = ((float)samples[k + 1] - 127.5f);
+            const float i_unfilt = ((float)samples[k]     - 127.5);
+            const float q_unfilt = ((float)samples[k + 1] - 127.5);
 
-            // rtl_sdr -f 868.35M -s 2400000 - 2>/dev/null | build/rtl_wmbus -d 3
-            //shift_freq(&i_unfilt, &q_unfilt, 600, 2400);
-
+    
             float i_t1_c1_unfilt = i_unfilt;
             float q_t1_c1_unfilt = q_unfilt;
 
@@ -780,9 +819,7 @@ int main(int argc, char *argv[])
 
             if (opts_s1_t1_c1_simultaneously)
             {
-                shift_freq_250(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
-
-                shift_freq_minus400(&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+            shift_freq_plus_minus325(&i_t1_c1_unfilt, &q_t1_c1_unfilt,&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
             }
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
@@ -823,7 +860,7 @@ int main(int argc, char *argv[])
 
             ++decimation_rate_index;
             if (decimation_rate_index < opts_decimation_rate) continue;
-            decimation_rate_index = 0;
+            decimation_rate_index -= opts_decimation_rate;
 
             // Demodulate.
             const float _delta_phi_t1_c1 = polar_discriminator_t1_c1(i_t1_c1, q_t1_c1);
@@ -937,4 +974,3 @@ int main(int argc, char *argv[])
     free(LUT_FREQUENCY_TRANSLATION_MINUS);
     return EXIT_SUCCESS;
 }
-
