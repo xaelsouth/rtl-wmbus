@@ -345,7 +345,7 @@ static inline float polar_discriminator_t1_c1(float i, float q)
 {
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
-    const float complex y = s * conj(s_last);
+    const float complex y = s * conjf(s_last);
 
 #if 1
     const float delta_phi = atan2_libm(y);
@@ -364,7 +364,7 @@ static inline float polar_discriminator_s1(float i, float q)
 {
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
-    const float complex y = s * conj(s_last);
+    const float complex y = s * conjf(s_last);
 
 #if 1
     const float delta_phi = atan2_libm(y);
