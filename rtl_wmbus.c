@@ -57,17 +57,13 @@ static const unsigned ACCESS_CODE_S1_ERRORS = 1u; // 0 if no errors allowed
    more "0" than "1" - i don't know why RTL-SDR do this.
 x = 'static const uint8_t deglitch_filter[128] = {'
 mod8 = 8
-
 for i in range(2**7):
     s = '{0:07b};'.format(i)
     val = '1' if bin(i).count("1") >= 3 else '0'
     print(s[0] + ";" + s[1] + ";" + s[2] + ";" + s[3] + ";" + s[4] + ";" + s[5] + ";" + s[6] + ";;%d;;%s" % (bin(i).count("1"), val))
-
     if i % 8 == 0: x += '\n\t'
     x += val + ','
-
 x += '};\n'
-
 print(x)
 */
 static const uint8_t deglitch_filter[128] =
@@ -341,28 +337,37 @@ static float rssi_filter_s1(float sample)
     return old_sample;
 }
 
+
+
 static inline float polar_discriminator_t1_c1(float i, float q)
 {
+/*#if 1
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
     const float complex y = s * conjf(s_last);
 
-#if 1
+
     const float delta_phi = atan2_libm(y);
 #elif 0
     const float delta_phi = atan2_approximation(y);
 #else
     const float delta_phi = atan2_approximation2(y);
 #endif
-
     s_last = s;
+*/
+    static float i_last,q_last;
+    const float delta_phi_imag=i_last*q-i*q_last; //we are using only complex part of the phase difference so avoid unnecesary computation of real part 
 
-    return delta_phi;
+    i_last=i;
+    q_last=q;
+
+
+    return delta_phi_imag*M_1_PI;
 }
 
 static inline float polar_discriminator_s1(float i, float q)
 {
-    static float complex s_last;
+/*    static float complex s_last;
     const float complex s = i + q * _Complex_I;
     const float complex y = s * conjf(s_last);
 
@@ -375,8 +380,17 @@ static inline float polar_discriminator_s1(float i, float q)
 #endif
 
     s_last = s;
-
     return delta_phi;
+*/
+    static float i_last,q_last;
+    const float delta_phi_imag=i_last*q-i*q_last; //we are using only complex part of the phase difference so avoid unnecesary computation of real part 
+
+    i_last=i;
+    q_last=q;
+
+
+    return delta_phi_imag*M_1_PI;
+
 }
 
 /** @brief Sparse Ones runs in time proportional to the number
@@ -627,7 +641,7 @@ static void process_options(int argc, char *argv[])
 
 static float complex *LUT_FREQUENCY_TRANSLATION_PLUS = NULL;
 static float complex *LUT_FREQUENCY_TRANSLATION_MINUS = NULL;
-#define FREQ_STEP_KHZ (50)
+#define FREQ_STEP_KHZ (25)
 
 /* fs_kHz is the sample rate in kHz. */
 void setup_lookup_tables_for_frequency_translation(int fs_kHz)
@@ -651,6 +665,40 @@ void setup_lookup_tables_for_frequency_translation(int fs_kHz)
         LUT_FREQUENCY_TRANSLATION_PLUS[n] = a - b * _Complex_I;
         LUT_FREQUENCY_TRANSLATION_MINUS[n] = a + b * _Complex_I;
     }
+}
+
+static void shift_freq_plus_minus325(float *iplus, float *qplus,float *iminus, float *qminus, int fs_kHz)
+{
+    const int ft = 325;
+    static size_t n = 0;
+    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
+    #if 0
+    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) + sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
+    n++;
+    #else
+    
+    const float x=crealf(LUT_FREQUENCY_TRANSLATION_PLUS[n]);
+    const float z=cimagf(LUT_FREQUENCY_TRANSLATION_PLUS[n]);
+    
+    n += ft/FREQ_STEP_KHZ;
+    #endif
+    if (n >= n_max) n -= n_max;
+    float ix,iz,qx,qz; 
+    //(i+Jq)*(x+Jz) =ix-qz+ J(qx+iz) positive rotation
+    //(i+Jq)*(x-Jz) =ix+qz+ J(qx-iz) negative rotation
+    //ix,qz,qx,iz are the same for boths shifts so we reuse them totaling 4 mul and 4 sums instead of 8 mul 4 sum
+    
+	ix=*iplus * x;
+	qx=*qplus * x;
+	iz=*iplus * z;
+	qz=*qplus * z;
+	//simetric negative shift 
+	*iminus=ix+qz; 
+	*qminus=qx-iz;
+	//simetric positive shift 
+	*iplus=ix-qz;
+	*qplus=qx+iz;	
+	
 }
 
 /* Positive frequencies shift: ft = 250kHz the signal will shift from 868.7M right to 868.95M. */
@@ -767,9 +815,12 @@ int main(int argc, char *argv[])
 
             if (opts_s1_t1_c1_simultaneously)
             {
-                shift_freq_250(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
+            shift_freq_plus_minus325(&i_t1_c1_unfilt, &q_t1_c1_unfilt,&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+            
+            /*    shift_freq_250(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
 
                 shift_freq_minus400(&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+              */  
             }
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
@@ -806,16 +857,15 @@ int main(int argc, char *argv[])
             ++decimation_rate_index;
             if (decimation_rate_index < opts_decimation_rate) continue;
             decimation_rate_index = 0;
-
-            // Demodulate.
+           // Demodulate.
             const float _delta_phi_t1_c1 = polar_discriminator_t1_c1(i_t1_c1, q_t1_c1);
-            const float _delta_s1 = polar_discriminator_s1(i_s1, q_s1);
+            const float _delta_phi_s1 = polar_discriminator_s1(i_s1, q_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
             // Post-filtering to prevent bit errors because of signal jitter.
             const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
-            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_s1);
+            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
@@ -838,7 +888,7 @@ int main(int argc, char *argv[])
 
 
             // --- runlength algorithm section begin ---
-            #if 1
+            #if 0
             if (opts_run_length_algorithm_enabled)
             {
                 runlength_algorithm(bit_t1_c1, rssi_t1_c1, &rl_algo);
@@ -857,6 +907,8 @@ int main(int argc, char *argv[])
                 // Clock-Signal is crossing zero in half period.
                 const int16_t clock_t1_c1 = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi_t1_c1 * delta_phi_t1_c1) >= 0) ? INT16_MAX : INT16_MIN;
                 const int16_t clock_s1 = (bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(delta_phi_s1 * delta_phi_s1) >= 0) ? INT16_MAX : INT16_MIN;
+                
+                
                 //fwrite(&clock, sizeof(clock), 1, clock_out);
 
                 if (clock_t1_c1 > old_clock_t1_c1)
@@ -903,6 +955,7 @@ int main(int argc, char *argv[])
                 // --- clock recovery section end ---
             }
             // --- time2 algorithm section end ---
+ 
         }
     }
 
@@ -911,4 +964,3 @@ int main(int argc, char *argv[])
     free(LUT_FREQUENCY_TRANSLATION_MINUS);
     return EXIT_SUCCESS;
 }
-
