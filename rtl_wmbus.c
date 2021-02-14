@@ -90,22 +90,9 @@ static const uint8_t deglitch_filter[128] =
     1,1,1,1,1,1,1,1
 };
 
-
-static float lp_1600kHz_56kHz(float sample, size_t i_or_q)
-{
-    static float moving_average[2];
-
-#define ALPHA 0.80259f // exp(-2.0 * M_PI * 56e3 / 1600e3)
-    moving_average[i_or_q] = ALPHA * (moving_average[i_or_q] - sample) + sample;
-#undef ALPHA
-
-    return moving_average[i_or_q];
-}
-
-
 static inline float moving_average_t1_c1(float sample, size_t i_or_q)
 {
-#define COEFFS 12
+#define COEFFS 8
     static int i_hist[COEFFS];
     static int q_hist[COEFFS];
 
@@ -121,7 +108,7 @@ static inline float moving_average_t1_c1(float sample, size_t i_or_q)
 
 static inline float moving_average_s1(float sample, size_t i_or_q)
 {
-#define COEFFS 12
+#define COEFFS 8
     static int i_hist[COEFFS];
     static int q_hist[COEFFS];
 
@@ -358,7 +345,7 @@ static inline float polar_discriminator_t1_c1(float i, float q)
 {
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
-    const float complex y = s * conj(s_last);
+    const float complex y = s * conjf(s_last);
 
 #if 1
     const float delta_phi = atan2_libm(y);
@@ -377,7 +364,7 @@ static inline float polar_discriminator_s1(float i, float q)
 {
     static float complex s_last;
     const float complex s = i + q * _Complex_I;
-    const float complex y = s * conj(s_last);
+    const float complex y = s * conjf(s_last);
 
 #if 1
     const float delta_phi = atan2_libm(y);
@@ -758,10 +745,11 @@ int main(int argc, char *argv[])
     process_options(argc, argv);
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
+
     const float fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
-    float i_t1_c1 = 0, q_t1_c1 = 0;
-    float i_s1 = 0, q_s1 = 0;
-    float decimation_rate_index = 0;
+    float i_t1_c1, q_t1_c1;
+    float i_s1, q_s1;
+    unsigned decimation_rate_index = 0;
     int16_t old_clock_t1_c1 = INT16_MIN, old_clock_s1 = INT16_MIN;
     unsigned clock_lock_t1_c1 = 0, clock_lock_s1 = 0;
 
@@ -843,19 +831,14 @@ int main(int argc, char *argv[])
 #elif 0
             i = lp_ppffp_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
             q = lp_ppffp_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
-#elif 0
-            i += lp_1600kHz_58kHz(i_unfilt, 0);
-            q += lp_1600kHz_58kHz(q_unfilt, 1);
-#define USE_MOVING_AVERAGE
 #else
             // Moving average can be viewed as a low pass filter.
 
-            i_t1_c1 += moving_average_t1_c1(i_t1_c1_unfilt, 0);
-            q_t1_c1 += moving_average_t1_c1(q_t1_c1_unfilt, 1);
+            i_t1_c1 = moving_average_t1_c1(i_t1_c1_unfilt, 0);
+            q_t1_c1 = moving_average_t1_c1(q_t1_c1_unfilt, 1);
 
-            i_s1 += moving_average_s1(i_s1_unfilt, 0);
-            q_s1 += moving_average_s1(q_s1_unfilt, 1);
-#define USE_MOVING_AVERAGE
+            i_s1 = moving_average_s1(i_s1_unfilt, 0);
+            q_s1 = moving_average_s1(q_s1_unfilt, 1);
 #endif
 
             ++decimation_rate_index;
@@ -889,20 +872,17 @@ int main(int argc, char *argv[])
 
             float rssi_s1 = sqrtf(i_s1*i_s1 + q_s1*q_s1);
             rssi_s1 = rssi_filter_s1(rssi_s1); // comment out, if rssi filtering is unwanted
-#if defined(USE_MOVING_AVERAGE)
-            // If using moving average, we would have multiples of I- and Q- signal components.
-            rssi_t1_c1 /= opts_decimation_rate;
-            rssi_s1 /= opts_decimation_rate;
-#endif
             // --- rssi filtering section end ---
 
 
             // --- runlength algorithm section begin ---
+            #if 1
             if (opts_run_length_algorithm_enabled)
             {
                 runlength_algorithm(bit_t1_c1, rssi_t1_c1, &rl_algo);
             }
             // --- runlength algorithm section end ---
+            #endif
 
 
             // --- time2 algorithm section begin ---
@@ -961,11 +941,6 @@ int main(int argc, char *argv[])
                 // --- clock recovery section end ---
             }
             // --- time2 algorithm section end ---
-
-#if defined(USE_MOVING_AVERAGE)
-            i_t1_c1 = q_t1_c1 = 0;
-            i_s1 = q_s1 = 0;
-#endif
         }
     }
 
