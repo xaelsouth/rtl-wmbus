@@ -118,7 +118,7 @@ I have tested this so far and can confirm that it works for T1/C1 and S1. Thanks
 
 Optimization on frequencies translation by rearranging compute steps implemented as proposed by alalons.
 
-Alalons (have I thanked you already?!) proposed an speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly on receiving C1 mode datagrams. A speed optimized arctan version can be activated by "-a" in the program options.
+Alalons (have I thanked you already?!) proposed a speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly on receiving C1 mode datagrams. A speed optimized arctan version can be activated by "-a" in the program options.
 
 
   License

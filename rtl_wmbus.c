@@ -966,8 +966,8 @@ int main(int argc, char *argv[])
 
                 runlength_algorithm_s1(bit_s1, rssi_s1, &rl_algo_s1);
             }
-            // --- runlength algorithm section end ---
             #endif
+            // --- runlength algorithm section end ---
 
 
             // --- time2 algorithm section begin ---
