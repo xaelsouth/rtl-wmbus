@@ -371,10 +371,10 @@ static inline float polar_discriminator_t1_c1(float i, float q)
 
 static inline float polar_discriminator_t1_c1_inaccurate(float i, float q)
 {
-    // We are using only complex part of the phase difference
+    // We are going to use only complex part of the phase difference
     // so avoid unnecesary computation of real part. The math behind:
     // cargf = atan (delta_phi_imag / delta_phi_real) / pi;
-    // In the formula only the sign is of interest.
+    // In the formula only the sign is of interest - we compute delta_phi_imag only.
 
     static float i_last, q_last;
 
@@ -407,10 +407,10 @@ static inline float polar_discriminator_s1(float i, float q)
 
 static inline float polar_discriminator_s1_inaccurate(float i, float q)
 {
-    // We are using only complex part of the phase difference
+    // We are going to use only complex part of the phase difference
     // so avoid unnecesary computation of real part. The math behind:
     // cargf = atan (delta_phi_imag / delta_phi_real) / pi;
-    // In the formula only the sign is of interest.
+    // In the formula only the sign is of interest - we compute delta_phi_imag only.
 
     static float i_last, q_last;
     const float delta_phi_imag = i_last*q - i*q_last;
@@ -751,78 +751,68 @@ static void process_options(int argc, char *argv[])
     }
 }
 
-static float complex *LUT_FREQUENCY_TRANSLATION_PLUS = NULL;
-static float complex *LUT_FREQUENCY_TRANSLATION_MINUS = NULL;
-#define FREQ_STEP_KHZ (50)
+static float *LUT_FREQUENCY_TRANSLATION_PLUS_COSINE = NULL;
+static float *LUT_FREQUENCY_TRANSLATION_PLUS_SINE = NULL;
+#define FREQ_STEP_KHZ (25)
 
 /* fs_kHz is the sample rate in kHz. */
-void setup_lookup_tables_for_frequency_translation(int fs_kHz)
+static void setup_lookup_tables_for_frequency_translation(int fs_kHz)
 {
     const int ft_kHz = FREQ_STEP_KHZ;
     const size_t n_max = fs_kHz/ft_kHz;
 
-    free(LUT_FREQUENCY_TRANSLATION_PLUS);
-    LUT_FREQUENCY_TRANSLATION_PLUS = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_PLUS[0]));
-    if (!LUT_FREQUENCY_TRANSLATION_PLUS) exit(EXIT_FAILURE);
+    free(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE);
+    LUT_FREQUENCY_TRANSLATION_PLUS_COSINE = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE[0]));
+    if (!LUT_FREQUENCY_TRANSLATION_PLUS_COSINE) exit(EXIT_FAILURE);
 
-    free(LUT_FREQUENCY_TRANSLATION_MINUS);
-    LUT_FREQUENCY_TRANSLATION_MINUS = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_MINUS[0]));
-    if (!LUT_FREQUENCY_TRANSLATION_MINUS) exit(EXIT_FAILURE);
+    free(LUT_FREQUENCY_TRANSLATION_PLUS_SINE);
+    LUT_FREQUENCY_TRANSLATION_PLUS_SINE = malloc(n_max *sizeof(LUT_FREQUENCY_TRANSLATION_PLUS_SINE[0]));
+    if (!LUT_FREQUENCY_TRANSLATION_PLUS_SINE) exit(EXIT_FAILURE);
 
     for (size_t n = 0; n < n_max; n++)
     {
         const double phi = (2. * M_PI * (ft_kHz * n)) / fs_kHz;
-        const float a = cosf(phi);
-        const float b = sinf(phi);
-        LUT_FREQUENCY_TRANSLATION_PLUS[n] = a - b * _Complex_I;
-        LUT_FREQUENCY_TRANSLATION_MINUS[n] = a + b * _Complex_I;
+        LUT_FREQUENCY_TRANSLATION_PLUS_COSINE[n] = cosf(phi);
+        LUT_FREQUENCY_TRANSLATION_PLUS_SINE[n] = -sinf(phi); // Minus sinf!
     }
 }
 
-/* Positive frequencies shift: ft = 250kHz the signal will shift from 868.7M right to 868.95M. */
-static void shift_freq_250(float *i, float *q, int fs_kHz)
+/* Positive frequencies shift: ft = +325kHz the signal will shift from 868.625M right to 868.95M.
+   Negative frequencies shift: ft = -325kHz the signal will shift from 868.625M right to 868.3M. */
+static void shift_freq_plus_minus325(float *iplus, float *qplus, float *iminus, float *qminus, int fs_kHz)
 {
-    const int ft = 250;
-    static size_t n = 0;
-    const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
-    #if 0
-    const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) - sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
-    n++;
-    #else
-    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_PLUS[n];
-    n += ft/FREQ_STEP_KHZ;
-    #endif
-    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
-    if (n >= n_max) n -= n_max;
-
-    float complex s = (*i) + (*q) * _Complex_I;
-    s = s * freq_shift;
-
-    *i = crealf(s);
-    *q = cimagf(s);
-}
-
-/* Negative frequencies shift: ft = 400kHz the signal will shift from 868.7M right to 868.3M. */
-static void shift_freq_minus400(float *i, float *q, int fs_kHz)
-{
-    const int ft = 400;
+    const int ft = 325;
     static size_t n = 0;
     const size_t n_max = fs_kHz/FREQ_STEP_KHZ;
     #if 0
     const float complex freq_shift = cosf(2.*M_PI*(ft*n)/fs_kHz) + sin(2.*M_PI*(ft*n)/fs_kHz) * _Complex_I;
     n++;
     #else
-    const float complex freq_shift = LUT_FREQUENCY_TRANSLATION_MINUS[n];
+    const float x = LUT_FREQUENCY_TRANSLATION_PLUS_COSINE[n];
+    const float z = LUT_FREQUENCY_TRANSLATION_PLUS_SINE[n];
     n += ft/FREQ_STEP_KHZ;
     #endif
-    //fprintf(stdout, "%ld, %ld: %f, %f\n", n, n_max, crealf(freq_shift), cimagf(freq_shift));
     if (n >= n_max) n -= n_max;
+    float ix, iz, qx, qz;
 
-    float complex s = (*i) + (*q) * _Complex_I;
-    s = s * freq_shift;
+    // (i+Jq)*(x+Jz) =ix-qz + J(qx+iz) positive rotation
+    // (i+Jq)*(x-Jz) =ix+qz + J(qx-iz) negative rotation
+    // ix, qz, qx, iz are the same for boths shifts so we reuse them
+    // totaling 4 mul and 4 sums instead of 8 mul 4 sum.
+    // It works because iplus equals to iminus and qplus equals to qminus.
 
-    *i = crealf(s);
-    *q = cimagf(s);
+    ix = *iplus * x;
+    qx = *qplus * x;
+    iz = *iplus * z;
+    qz = *qplus * z;
+
+    // Symmetric positive shift.
+    *iplus = ix - qz;
+    *qplus = qx + iz;
+
+    // Symmetric negative shift .
+    *iminus = ix + qz;
+    *qminus = qx - iz;
 }
 
 int main(int argc, char *argv[])
@@ -899,9 +889,7 @@ int main(int argc, char *argv[])
 
             if (opts_s1_t1_c1_simultaneously)
             {
-                shift_freq_250(&i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz);
-
-                shift_freq_minus400(&i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+                shift_freq_plus_minus325(&i_t1_c1_unfilt, &q_t1_c1_unfilt, &i_s1_unfilt, &q_s1_unfilt, fs_kHz);
             }
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
@@ -1043,8 +1031,8 @@ int main(int argc, char *argv[])
     }
 
     if (input != stdin) fclose(input);
-    free(LUT_FREQUENCY_TRANSLATION_PLUS);
-    free(LUT_FREQUENCY_TRANSLATION_MINUS);
+    free(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE);
+    free(LUT_FREQUENCY_TRANSLATION_PLUS_SINE);
     return EXIT_SUCCESS;
 }
 

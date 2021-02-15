@@ -103,20 +103,23 @@ Run length algorithm works well with a few mode C1 devices I had around me, but 
 S1 mode datagrams can now be received! You have to start rtl_wmbus at 868.3MHz with
  * rtl_sdr -f 868.3M -s 1600000 - 2>/dev/null | build/rtl_wmbus
 
-time2 clock recovery method has to be activated in this case (it's active by default). It works very well because of Manchester coding.
-
 Last but not least, you can try to receive all datagrams (S1, T1, C1) _simultaneously_:
- * rtl_sdr -f 868.7M -s 1600000 - 2>/dev/null | build/rtl_wmbus -s
+ * rtl_sdr -f 868.625M -s 1600000 - 2>/dev/null | build/rtl_wmbus -s
 
 Notice in the last line:
  * "-s": which is needed to inform rtl_wmbus about required frequency translation
- * "868.7M": the new frequency to receive at
+ * "868.625M": the new frequency to receive at
 
 rtl_wmbus will then shift all frequencies
- * by 250kHz to new center frequency at 868.95Mhz (T1 and C1)
- * by 400kHz to new center frequency at 868.3Mhz (S1)
+ * by +325kHz to new center frequency at 868.95Mhz (T1 and C1)
+ * by -325kHz to new center frequency at 868.3Mhz (S1)
 
 I have tested this so far and can confirm that it works for T1/C1 and S1. Thanks to alalons for providing me with bitstreams!
+
+Optimization on frequencies translation by rearranging compute steps implemented as proposed by alalons.
+
+Alalons (have I thanked you already?!) proposed an speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly on receiving C1 mode datagrams. A speed optimized arctan version can be activated by "-a" in the program options.
+
 
   License
   -------
