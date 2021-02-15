@@ -890,6 +890,7 @@ int main(int argc, char *argv[])
             if (opts_s1_t1_c1_simultaneously)
             {
                 shift_freq_plus_minus325(&i_t1_c1_unfilt, &q_t1_c1_unfilt, &i_s1_unfilt, &q_s1_unfilt, fs_kHz);
+                //shift_freq_plus_minus325(&i_s1_unfilt, &q_s1_unfilt, &i_t1_c1_unfilt, &q_t1_c1_unfilt, fs_kHz); // Just to test T1/C1 at 869.275M.
             }
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
