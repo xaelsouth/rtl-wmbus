@@ -369,6 +369,23 @@ static inline float polar_discriminator_t1_c1(float i, float q)
     return delta_phi;
 }
 
+static inline float polar_discriminator_t1_c1_inaccurate(float i, float q)
+{
+    // We are using only complex part of the phase difference
+    // so avoid unnecesary computation of real part. The math behind:
+    // cargf = atan (delta_phi_imag / delta_phi_real) / pi;
+    // In the formula only the sign is of interest.
+
+    static float i_last, q_last;
+
+    const float delta_phi_imag = i_last*q - i*q_last;
+
+    i_last = i;
+    q_last = q;
+
+    return delta_phi_imag;
+}
+
 static inline float polar_discriminator_s1(float i, float q)
 {
     static float complex s_last;
@@ -386,6 +403,22 @@ static inline float polar_discriminator_s1(float i, float q)
     s_last = s;
 
     return delta_phi;
+}
+
+static inline float polar_discriminator_s1_inaccurate(float i, float q)
+{
+    // We are using only complex part of the phase difference
+    // so avoid unnecesary computation of real part. The math behind:
+    // cargf = atan (delta_phi_imag / delta_phi_real) / pi;
+    // In the formula only the sign is of interest.
+
+    static float i_last, q_last;
+    const float delta_phi_imag = i_last*q - i*q_last;
+
+    i_last = i;
+    q_last = q;
+
+    return delta_phi_imag;
 }
 
 /** @brief Sparse Ones runs in time proportional to the number
@@ -651,14 +684,16 @@ static int opts_run_length_algorithm_enabled = 1;
 static int opts_time2_algorithm_enabled = 1;
 static unsigned opts_decimation_rate = 2u;
 static int opts_s1_t1_c1_simultaneously = 0;
+static int opts_accurate_atan = 1;
 int opts_show_used_algorithm = 0;
-static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2;
-static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2;
+static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2; // Is not implemented as option yet.
+static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2; // Is not implemented as option yet.
 
 
 static void print_usage(const char *program_name)
 {
     fprintf(stdout, "Usage %s:\n", program_name);
+    fprintf(stdout, "\t-a accelerate (use an inaccurate atan version)\n");
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
@@ -671,10 +706,13 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "d:r:vst:")) != -1)
+    while ((option = getopt(argc, argv, "ad:r:vst:")) != -1)
     {
         switch (option)
         {
+        case 'a':
+            opts_accurate_atan = 0;
+            break;
         case 'r':
             if (strcmp(optarg, "0") == 0)
             {
@@ -810,6 +848,9 @@ int main(int argc, char *argv[])
 
     struct runlength_algorithm_s1 rl_algo_s1;
     runlength_algorithm_reset_s1(&rl_algo_s1);
+    
+    float (*polar_discriminator_t1_c1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_t1_c1 : polar_discriminator_t1_c1_inaccurate;
+    float (*polar_discriminator_s1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_s1 : polar_discriminator_s1_inaccurate;
 
     FILE *input = stdin;
     //input = fopen("samples/samples2.bin", "rb");
@@ -899,8 +940,8 @@ int main(int argc, char *argv[])
             decimation_rate_index = 0;
 
             // Demodulate.
-            const float _delta_phi_t1_c1 = polar_discriminator_t1_c1(i_t1_c1, q_t1_c1);
-            const float _delta_s1 = polar_discriminator_s1(i_s1, q_s1);
+            const float _delta_phi_t1_c1 = polar_discriminator_t1_c1_function(i_t1_c1, q_t1_c1);
+            const float _delta_s1 = polar_discriminator_s1_function(i_s1, q_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
