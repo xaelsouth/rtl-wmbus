@@ -50,12 +50,12 @@ static const uint32_t ACCESS_CODE_S1_BITMASK = 0x3FFFFu;
 static const unsigned ACCESS_CODE_S1_ERRORS = 1u; // 0 if no errors allowed
 
 
-/* deglitch_filter has been calculated by a Python script as follows.
+/* deglitch_filter_t1_c1 has been calculated by a Python script as follows.
    The filter is counting "1" among 7 bits and saying "1" if count("1") >= 3 else "0".
    Notice here count("1") >= 3. (More intuitive in that case would be count("1") >= 3.5.)
    That forces the filter to put more "1" than "0" on the output, because RTL-SDR streams
    more "0" than "1" - i don't know why RTL-SDR do this.
-x = 'static const uint8_t deglitch_filter[128] = {'
+x = 'static const uint8_t deglitch_filter_t1_c1[128] = {'
 mod8 = 8
 
 for i in range(2**7):
@@ -70,7 +70,7 @@ x += '};\n'
 
 print(x)
 */
-static const uint8_t deglitch_filter[128] =
+static const uint8_t deglitch_filter_t1_c1[128] =
 {
     0,0,0,0,0,0,0,1,
     0,0,0,1,0,1,1,1,
@@ -90,6 +90,15 @@ static const uint8_t deglitch_filter[128] =
     1,1,1,1,1,1,1,1
 };
 
+
+static const uint8_t deglitch_filter_s1[16] = {
+   // 0000 0001 0010 0011 0100 0101 0110 0111
+         0,   1,   0,   1,   1,   1,   1,   1,
+    // 1000 1001 1010 1011 1100 1101 1110 1111
+         0,   1,   1,   1,   1,   1,   1,   1
+};
+
+
 static inline float moving_average_t1_c1(float sample, size_t i_or_q)
 {
 #define COEFFS 8
@@ -108,7 +117,7 @@ static inline float moving_average_t1_c1(float sample, size_t i_or_q)
 
 static inline float moving_average_s1(float sample, size_t i_or_q)
 {
-#define COEFFS 8
+#define COEFFS 16
     static int i_hist[COEFFS];
     static int q_hist[COEFFS];
 
@@ -408,7 +417,86 @@ static inline unsigned count_set_bits(uint32_t n)
 }
 
 
-struct runlength_algorithm
+struct runlength_algorithm_s1
+{
+    int run_length;
+    unsigned state;
+    uint32_t raw_bitstream;
+    uint32_t bitstream;
+    int samples_per_bit[2];
+    struct s1_packet_decoder_work decoder;
+};
+
+
+static void runlength_algorithm_reset_s1(struct runlength_algorithm_s1 *algo)
+{
+    algo->run_length = 0;
+    algo->state = 0u;
+    algo->raw_bitstream = 0;
+    algo->bitstream = 0;
+    algo->samples_per_bit[0] = 24; // Data rate is 32768 bps which gives us approx. 24 samples
+    algo->samples_per_bit[1] = 24; // at a sample rate of 800kHz (800kHz / 32768bps = 24.41 ~= 24 samples).
+    reset_s1_packet_decoder(&algo->decoder);
+}
+
+
+static void runlength_algorithm_s1(unsigned raw_bit, unsigned rssi, struct runlength_algorithm_s1 *algo)
+{
+    algo->raw_bitstream = (algo->raw_bitstream << 1) | raw_bit;
+
+    const unsigned state = deglitch_filter_s1[algo->raw_bitstream & 0xFu];
+
+    if (algo->state == state)
+    {
+        algo->run_length++;
+    }
+    else
+    {
+        const int samples_per_bit = (algo->samples_per_bit[0] + algo->samples_per_bit[1]) / 2;
+        if (samples_per_bit <= 24/2)
+        {
+            runlength_algorithm_reset_s1(algo);
+            algo->state = state;
+            algo->run_length = 1;
+            return;
+        }
+
+        const int run_length = algo->run_length;
+        if (run_length <= samples_per_bit/2)
+        {
+            runlength_algorithm_reset_s1(algo);
+            algo->state = state;
+            algo->run_length = 1;
+            return;
+        }
+
+        int num_of_bits_rx;
+        for (num_of_bits_rx = 0; algo->run_length > samples_per_bit/2; num_of_bits_rx++)
+        {
+            algo->run_length -= samples_per_bit;
+
+            unsigned bit = algo->state;
+
+            algo->bitstream = (algo->bitstream << 1) | bit;
+
+            if (count_set_bits((algo->bitstream & ACCESS_CODE_S1_BITMASK) ^ ACCESS_CODE_S1) <= ACCESS_CODE_S1_ERRORS)
+            {
+                bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+            }
+
+            s1_packet_decoder(bit, rssi, &algo->decoder, "rla;");
+        }
+
+        //fprintf(stdout, "%u, %d, bits: %d, 0: %u, 1: %u\n", algo->state, run_length, num_of_bits_rx, algo->samples_per_bit[0], algo->samples_per_bit[1]);
+
+        algo->samples_per_bit[algo->state] = run_length / num_of_bits_rx;
+        algo->state = state;
+        algo->run_length = 1;
+    }
+}
+
+
+struct runlength_algorithm_t1_c1
 {
     int run_length;
     int bit_length;
@@ -420,7 +508,7 @@ struct runlength_algorithm
 };
 
 
-static void runlength_algorithm_reset(struct runlength_algorithm *algo)
+static void runlength_algorithm_reset_t1_c1(struct runlength_algorithm_t1_c1 *algo)
 {
     algo->run_length = 0;
     algo->bit_length = 8 * 256;
@@ -432,11 +520,11 @@ static void runlength_algorithm_reset(struct runlength_algorithm *algo)
 }
 
 
-static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlength_algorithm *algo)
+static void runlength_algorithm_t1_c1(unsigned raw_bit, unsigned rssi, struct runlength_algorithm_t1_c1 *algo)
 {
     algo->raw_bitstream = (algo->raw_bitstream << 1) | raw_bit;
 
-    const unsigned state = deglitch_filter[algo->raw_bitstream & 0x3Fu];
+    const unsigned state = deglitch_filter_t1_c1[algo->raw_bitstream & 0x3Fu];
 
     if (algo->state == state)
     {
@@ -446,7 +534,7 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
     {
         if (algo->run_length < 5)
         {
-            runlength_algorithm_reset(algo);
+            runlength_algorithm_reset_t1_c1(algo);
             algo->state = state;
             algo->run_length = 1;
             return;
@@ -460,7 +548,7 @@ static void runlength_algorithm(unsigned raw_bit, unsigned rssi, struct runlengt
 
         if (algo->run_length <= half_bit_length)
         {
-            runlength_algorithm_reset(algo);
+            runlength_algorithm_reset_t1_c1(algo);
             algo->state = state;
             algo->run_length = 1;
             return;
@@ -717,8 +805,11 @@ int main(int argc, char *argv[])
     struct time2_algorithm_s1 t2_algo_s1;
     time2_algorithm_s1_reset(&t2_algo_s1);
 
-    struct runlength_algorithm rl_algo;
-    runlength_algorithm_reset(&rl_algo);
+    struct runlength_algorithm_t1_c1 rl_algo_t1_c1;
+    runlength_algorithm_reset_t1_c1(&rl_algo_t1_c1);
+
+    struct runlength_algorithm_s1 rl_algo_s1;
+    runlength_algorithm_reset_s1(&rl_algo_s1);
 
     FILE *input = stdin;
     //input = fopen("samples/samples2.bin", "rb");
@@ -841,13 +932,16 @@ int main(int argc, char *argv[])
             #if 1
             if (opts_run_length_algorithm_enabled)
             {
-                runlength_algorithm(bit_t1_c1, rssi_t1_c1, &rl_algo);
+                runlength_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, &rl_algo_t1_c1);
+
+                runlength_algorithm_s1(bit_s1, rssi_s1, &rl_algo_s1);
             }
             // --- runlength algorithm section end ---
             #endif
 
 
             // --- time2 algorithm section begin ---
+            #if 1
             if (opts_time2_algorithm_enabled)
             {
                 // --- clock recovery section begin ---
@@ -902,6 +996,7 @@ int main(int argc, char *argv[])
                 old_clock_s1 = clock_s1;
                 // --- clock recovery section end ---
             }
+            #endif
             // --- time2 algorithm section end ---
         }
     }

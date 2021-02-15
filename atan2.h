@@ -6,7 +6,7 @@
 
 static inline float atan2_libm(float complex y)
 {
-    return carg(y) * (float)M_1_PI;
+    return cargf(y) * (float)M_1_PI;
 }
 
 
