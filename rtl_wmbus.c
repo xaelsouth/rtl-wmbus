@@ -848,7 +848,7 @@ int main(int argc, char *argv[])
 
     struct runlength_algorithm_s1 rl_algo_s1;
     runlength_algorithm_reset_s1(&rl_algo_s1);
-    
+
     float (*polar_discriminator_t1_c1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_t1_c1 : polar_discriminator_t1_c1_inaccurate;
     float (*polar_discriminator_s1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_s1 : polar_discriminator_s1_inaccurate;
 
