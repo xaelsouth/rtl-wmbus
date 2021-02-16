@@ -47,19 +47,22 @@ To save an I/Q-stream on disk and decode that off-line:
  * rtl_sdr samples.bin -f 868.95M -s 1600000
  * cat samples.bin | build/rtl_wmbus
 
-To run continuously:
+To save an I/Q-stream and decode this immediately to see what's going on right now:
+ * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | tee samples.bin | build/rtl_wmbus
+
+To run continuously without saving anything on disk:
  * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
 
 To run continuously with rx_sdr (or even with a higher sampling and decimation rate)
  * rx_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
  * rx_sdr -f 868.95M -s 4000000 - 2>/dev/null | build/rtl_wmbus -d 5
 
-Notice "-d 5" in the last line: it's a multiple of 800kHz resulting from the sample rate of 4000000.
+Notice "-d 5" in the last line: it's a multiple of 800kHz resulting from the sample rate of 4MHz.
 
 To count "good" (no 3 out of 6 errors, no checksum errors) packets:
  * cat samples.bin | build/rtl_wmbus 2>/dev/null | grep "[T,C,S]1;1;1" | wc -l
 
-Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s should be used or use a multiple of 800kHz. RTL-SDR supports sampling frequencies up to 3.2MSaples, so you use 1.6MSamples, 2.4MSamples or 3.2Msamples.
+Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s should be used or use a multiple of 800kHz. RTL-SDR supports sampling rate up to 3.2 MSamples, so you can choose 1.6 MSamples, 2.4 MSamples or 3.2 MSamples.
 
 See samples/samples2.bin for a live example with two T1 mode devices inside.
 
@@ -118,7 +121,7 @@ I have tested this so far and can confirm that it works for T1/C1 and S1. Thanks
 
 Optimization on frequencies translation by rearranging compute steps implemented as proposed by alalons.
 
-Alalons (have I thanked you already?!) proposed a speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly on receiving C1 mode datagrams. A speed optimized arctan version can be activated by "-a" in the program options.
+Alalons (have I thanked you already?!) proposed a speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly. I have seen that on receiving C1 mode datagrams - that's why the speed optimized version is not in use by default. A speed optimized arctan version can be activated by "-a" in the program options.
 
 
   License

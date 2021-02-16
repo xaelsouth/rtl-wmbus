@@ -494,8 +494,9 @@ static void runlength_algorithm_s1(unsigned raw_bit, unsigned rssi, struct runle
             return;
         }
 
+        const int half_bit_length = samples_per_bit/2;
         const int run_length = algo->run_length;
-        if (run_length <= samples_per_bit/2)
+        if (run_length <= half_bit_length)
         {
             runlength_algorithm_reset_s1(algo);
             algo->state = state;
@@ -504,7 +505,7 @@ static void runlength_algorithm_s1(unsigned raw_bit, unsigned rssi, struct runle
         }
 
         int num_of_bits_rx;
-        for (num_of_bits_rx = 0; algo->run_length > samples_per_bit/2; num_of_bits_rx++)
+        for (num_of_bits_rx = 0; algo->run_length > half_bit_length; num_of_bits_rx++)
         {
             algo->run_length -= samples_per_bit;
 
