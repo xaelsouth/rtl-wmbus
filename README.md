@@ -99,6 +99,8 @@ identical datagrams, where each has been decoded by its own methods. If you real
 rtl_wmbus with "-r 0" or "-t 0" argument to prevent executing of run length or time2 method respectively.
 You can play with arguments and check which method performs better for you. Please note, that both methods are active by default.
 
+The advantage of the run length algorithm is that it works without IIR filter (which are needed only for clock recovery by time2 method). Therefore the run length algorithm can be applied to all RF ICs providing raw _demodulated_ signal without clock in the "transparent serial mode" like TI CC1125 (swru295e.pdf, 8.7.2) does.
+
 An additional method introduces more calculation steps, so I'm not sure if Raspberry Pi 1 will still work with that.
 
 Run length algorithm works well with a few mode C1 devices I had around me, but can still be improved with your help.

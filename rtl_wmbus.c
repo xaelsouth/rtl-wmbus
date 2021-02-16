@@ -90,10 +90,12 @@ static const uint8_t deglitch_filter_t1_c1[128] =
     1,1,1,1,1,1,1,1
 };
 
-
+/* 1) Force the filter to put more ones than zeros on the output.
+   2) Zeros surrounded by ones are ones and vice versa.
+*/
 static const uint8_t deglitch_filter_s1[16] = {
    // 0000 0001 0010 0011 0100 0101 0110 0111
-         0,   1,   0,   1,   1,   1,   1,   1,
+         0,   1,   0,   1,   0,   1,   1,   1,
     // 1000 1001 1010 1011 1100 1101 1110 1111
          0,   1,   1,   1,   1,   1,   1,   1
 };
@@ -479,14 +481,20 @@ static void runlength_algorithm_s1(unsigned raw_bit, unsigned rssi, struct runle
 
     const unsigned state = deglitch_filter_s1[algo->raw_bitstream & 0xFu];
 
+    // Edge detector.
     if (algo->state == state)
     {
         algo->run_length++;
     }
     else
     {
+        // Get the current bit length expressed in samples as an
+        // average of two preceeding symbols.
         const int samples_per_bit = (algo->samples_per_bit[0] + algo->samples_per_bit[1]) / 2;
-        if (samples_per_bit <= 24/2)
+
+        // Reset the state machine if the current bit length (in samples)
+        // is less than 0.5 or more than 1.5 of the ideal symbol length.
+        if (samples_per_bit <= 24/2 || samples_per_bit >= (24+24/2))
         {
             runlength_algorithm_reset_s1(algo);
             algo->state = state;
@@ -494,6 +502,8 @@ static void runlength_algorithm_s1(unsigned raw_bit, unsigned rssi, struct runle
             return;
         }
 
+        // Reset the state machine if the sequence of ones (or zeros)
+        // is less than 0.5 symbol length that we assume.
         const int half_bit_length = samples_per_bit/2;
         const int run_length = algo->run_length;
         if (run_length <= half_bit_length)
@@ -560,6 +570,7 @@ static void runlength_algorithm_t1_c1(unsigned raw_bit, unsigned rssi, struct ru
 
     const unsigned state = deglitch_filter_t1_c1[algo->raw_bitstream & 0x3Fu];
 
+    // Edge detector.
     if (algo->state == state)
     {
         algo->run_length++;
