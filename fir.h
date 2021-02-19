@@ -37,7 +37,7 @@
 typedef struct
 {
     const size_t length;
-    const float *const b;
+    float *const b;
 
     size_t i;
     float *hist;
@@ -71,6 +71,26 @@ float firf(float sample, FIRF_FILTER *filter)
     return sample;
 }
 
+void firf_lms(float mu_e, FIRF_FILTER *filter)
+{
+    float *b = &filter->b[filter->length-1];
+    size_t i;
+    float *hist;
+
+    i = filter->i;
+    hist = &filter->hist[i];
+    while (i++ < filter->length)
+    {
+        *b-- += mu_e * *hist++;
+    }
+
+    i = 0;
+    hist = &filter->hist[i];
+    while (i++ < filter->i)
+    {
+        *b-- += mu_e * *hist++;
+    }
+}
 
 typedef struct
 {

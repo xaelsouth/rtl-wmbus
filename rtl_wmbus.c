@@ -136,8 +136,8 @@ static inline float moving_average_s1(float sample, size_t i_or_q)
 static inline float lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(float sample, size_t i_or_q)
 {
 #define COEFFS 23
-    static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
-    //static const float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
+    static float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
+    //static float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
 
     static float i_hist[COEFFS] = {};
     static float q_hist[COEFFS] = {};
@@ -155,8 +155,8 @@ static inline float lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(float sample, size
 static inline float lp_fir_butter_1600kHz_160kHz_200kHz_s1(float sample, size_t i_or_q)
 {
 #define COEFFS 23
-    static const float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
-    //static const float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
+    static float b[COEFFS] = {0.000140535927, 1.102280392e-05, 0.0001309279731, 0.001356012537, 0.00551787474, 0.01499414005, 0.03160167988, 0.05525973093, 0.08315031015, 0.1099887688, 0.1295143636, 0.1366692652, 0.1295143636, 0.1099887688, 0.08315031015, 0.05525973093, 0.03160167988, 0.01499414005, 0.00551787474, 0.001356012537, 0.0001309279731, 1.102280392e-05, 0.000140535927, };
+    //static float b[COEFFS] = {0.001645672124, 0.0004733757463, -0.002542116469, -0.008572441674, -0.01545406295, -0.01651661113, -0.002914917097, 0.03113207374, 0.08317149659, 0.1410058012, 0.1866042197, 0.2039350204, 0.1866042197, 0.1410058012, 0.08317149659, 0.03113207374, -0.002914917097, -0.01651661113, -0.01545406295, -0.008572441674, -0.002542116469, 0.0004733757463, 0.001645672124, };
 
     static float i_hist[COEFFS] = {};
     static float q_hist[COEFFS] = {};
@@ -198,7 +198,7 @@ static inline float lp_ppf_butter_1600kHz_160kHz_200kHz(float sample, size_t i_o
 {
 #define PHASES 2
 #define COEFFS 12
-    static const float b[PHASES][COEFFS] =
+    static float b[PHASES][COEFFS] =
     {
         {0.000140535927, 0.0001309279731, 0.00551787474, 0.03160167988, 0.08315031015, 0.1295143636, 0.1295143636, 0.08315031015, 0.03160167988, 0.00551787474, 0.0001309279731, 0.000140535927, },
         {1.102280392e-05, 0.001356012537, 0.01499414005, 0.05525973093, 0.1099887688, 0.1366692652, 0.1099887688, 0.05525973093, 0.01499414005, 0.001356012537, 1.102280392e-05, 0, },
@@ -308,7 +308,7 @@ static inline float bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(float sample)
 static inline float lp_fir_butter_800kHz_100kHz_160kHz(float sample)
 {
 #define COEFFS 11
-    static const float b[COEFFS] = {-0.00456638213, -0.002571450348, 0.02689425925, 0.1141330398, 0.2264456422, 0.2793297826, 0.2264456422, 0.1141330398, 0.02689425925, -0.002571450348, -0.00456638213, };
+    static float b[COEFFS] = {-0.00456638213, -0.002571450348, 0.02689425925, 0.1141330398, 0.2264456422, 0.2793297826, 0.2264456422, 0.1141330398, 0.02689425925, -0.002571450348, -0.00456638213, };
     static float hist[COEFFS];
 
     static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
@@ -320,7 +320,7 @@ static inline float lp_fir_butter_800kHz_100kHz_160kHz(float sample)
 static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
 {
 #define COEFFS 46
-    static const float b[COEFFS] = {-0.000649081282, -0.0009491938209, -0.001361601657, -0.001910785234, -0.002570133495, -0.003251218426, -0.003801634695, -0.004012672882, -0.003636803575, -0.002413585945, -0.0001013597693, 0.003488892085, 0.008461671287, 0.01481127545, 0.02240598045, 0.03098477999, 0.0401679839, 0.04948137286, 0.05839197924, 0.06635211627, 0.07284719662, 0.07744230649, 0.07982251613, 0.07982251613, 0.07744230649, 0.07284719662, 0.06635211627, 0.05839197924, 0.04948137286, 0.0401679839, 0.03098477999, 0.02240598045, 0.01481127545, 0.008461671287, 0.003488892085, -0.0001013597693, -0.002413585945, -0.003636803575, -0.004012672882, -0.003801634695, -0.003251218426, -0.002570133495, -0.001910785234, -0.001361601657, -0.0009491938209, -0.000649081282, };
+    static float b[COEFFS] = {-0.000649081282, -0.0009491938209, -0.001361601657, -0.001910785234, -0.002570133495, -0.003251218426, -0.003801634695, -0.004012672882, -0.003636803575, -0.002413585945, -0.0001013597693, 0.003488892085, 0.008461671287, 0.01481127545, 0.02240598045, 0.03098477999, 0.0401679839, 0.04948137286, 0.05839197924, 0.06635211627, 0.07284719662, 0.07744230649, 0.07982251613, 0.07982251613, 0.07744230649, 0.07284719662, 0.06635211627, 0.05839197924, 0.04948137286, 0.0401679839, 0.03098477999, 0.02240598045, 0.01481127545, 0.008461671287, 0.003488892085, -0.0001013597693, -0.002413585945, -0.003636803575, -0.004012672882, -0.003801634695, -0.003251218426, -0.002570133495, -0.001910785234, -0.001361601657, -0.0009491938209, -0.000649081282, };
 
     static float hist[COEFFS];
 
@@ -328,6 +328,87 @@ static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
 #undef COEFFS
 
     return firf(sample, &filter);
+}
+
+/* https://liquidsdr.org/blog/lms-equalizer/ */
+static inline void equalizer_complex_t1_c1(float *i, float *q)
+{
+    static const float mu = 0.05f;
+    static size_t buf_index = 0;
+
+#define COEFFS 21
+    static float complex w[COEFFS] = {
+        0.f, 0.f, 0.f, 0.f, 0.f,
+        0.f, 0.f, 0.f, 0.f, 0.f,
+        1.f,
+        0.f, 0.f, 0.f, 0.f, 0.f,
+        0.f, 0.f, 0.f, 0.f, 0.f,
+    };
+
+    static float complex b[COEFFS];
+
+    b[buf_index] = *i + *q * _Complex_I;
+    buf_index = (buf_index + 1) % COEFFS;
+
+    float complex r = 0.f;
+    for (int k = 0; k < COEFFS; k++)
+    {
+        r += b[(buf_index+k)%COEFFS] * conjf(w[k]);
+    }
+
+    const float complex e = (*q >= 0.f) ? (127.5f * _Complex_I) : (-127.5f * _Complex_I);
+    for (int k = 0; k < COEFFS; k++)
+    {
+        w[k] = w[k] - mu * conjf(e)*b[(buf_index+k)%COEFFS];
+    }
+#undef COEFFS
+
+    //fprintf(stdout, "%8.3f, %8.3f, %8.3f, %8.3f\n", *i, crealf(r), *q, cimagf(r));
+
+    *i = crealf(r);
+    *q = cimagf(r);
+}
+
+static inline float equalizer_t1_c1(const float sample, const float d)
+{
+    static const float mu = 0.05f;
+
+#define COEFFS 9
+    static float b[COEFFS] = { [COEFFS/2 + 1] = 1.f, };
+
+    static float hist[COEFFS];
+
+    static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
+#undef COEFFS
+
+    const float r = firf(sample, &filter);
+
+    const float e = d - r;
+    const float mu_e = mu * e;
+    firf_lms(mu_e, &filter);
+
+    return r;
+}
+
+static inline float equalizer_s1(const float sample, const float d)
+{
+    static const float mu = 0.05f;
+
+#define COEFFS 19
+    static float b[COEFFS] = { [COEFFS/2 + 1] = 1.f, };
+
+    static float hist[COEFFS];
+
+    static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
+#undef COEFFS
+
+    const float r = firf(sample, &filter);
+
+    const float e = d - r;
+    const float mu_e = mu * e;
+    firf_lms(mu_e, &filter);
+
+    return r;
 }
 
 static float rssi_filter_t1_c1(float sample)
@@ -655,14 +736,13 @@ static void time2_algorithm_t1_c1_reset(struct time2_algorithm_t1_c1 *algo)
 
 static void time2_algorithm_t1_c1(unsigned bit, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
 {
-    //fprintf(stdout, "%u\n",bit);
-
     algo->bitstream = (algo->bitstream << 1) | bit;
 
     if (count_set_bits((algo->bitstream & ACCESS_CODE_T1_C1_BITMASK) ^ ACCESS_CODE_T1_C1) <= ACCESS_CODE_T1_C1_ERRORS)
     {
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
     }
+
     t1_c1_packet_decoder(bit, rssi, &algo->t1_c1_decoder, "t2a;");
 }
 
@@ -680,14 +760,13 @@ static void time2_algorithm_s1_reset(struct time2_algorithm_s1 *algo)
 
 static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorithm_s1 *algo)
 {
-    //fprintf(stdout, "%u\n",bit);
-
     algo->bitstream = (algo->bitstream << 1) | bit;
 
     if (count_set_bits((algo->bitstream & ACCESS_CODE_S1_BITMASK) ^ ACCESS_CODE_S1) <= ACCESS_CODE_S1_ERRORS)
     {
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
     }
+
     s1_packet_decoder(bit, rssi, &algo->s1_decoder, "t2a;");
 }
 
@@ -864,7 +943,7 @@ int main(int argc, char *argv[])
 
     if (input == NULL)
     {
-        fprintf(stderr, "opening input error\n");
+        fprintf(stderr, "File open error.\n");
         return EXIT_FAILURE;
     }
 
@@ -936,19 +1015,25 @@ int main(int argc, char *argv[])
             q_s1 = moving_average_s1(q_s1_unfilt, 1);
 #endif
 
+            #if 0
+            equalizer_complex_t1_c1(&i_t1_c1, &q_t1_c1);
+            #endif
+
             ++decimation_rate_index;
             if (decimation_rate_index < opts_decimation_rate) continue;
             decimation_rate_index = 0;
 
             // Demodulate.
             const float _delta_phi_t1_c1 = polar_discriminator_t1_c1_function(i_t1_c1, q_t1_c1);
-            const float _delta_s1 = polar_discriminator_s1_function(i_s1, q_s1);
+            const float _delta_phi_s1 = polar_discriminator_s1_function(i_s1, q_s1);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
             // Post-filtering to prevent bit errors because of signal jitter.
             const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
-            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_s1);
+            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
+            //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
+            //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
             //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
             //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
