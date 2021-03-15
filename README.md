@@ -41,7 +41,7 @@ To install rtl-wmbus, download, unpack the source code and go to the top level d
 
 Before building Android version the SDK and NDK have to be installed. See androidbuild.bat for how to build and install.
 
-For Windows user:
+For Windows users:
  * Download and install https://downloads.myriadrf.org/builds/PothosSDR/PothosSDR-2021.02.28-vc16-x64.exe
  * Compile rtl-wmbus with MSYS2-MinGW just by executing make in MSYS2-MinGW-Console...
  * Or use precompiled binary from the build directory
