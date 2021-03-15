@@ -31,15 +31,28 @@
 #include <complex.h>
 #include <stdio.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <fixedptc/fixedptc.h>
 #include "fir.h"
 #include "iir.h"
 #include "ppf.h"
 #include "moving_average_filter.h"
 #include "atan2.h"
-#include "net_support.h"
 #include "t1_c1_packet_decoder.h"
 #include "s1_packet_decoder.h"
+
+#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
+#define WINDOWS_BUILD 1
+#else
+#define WINDOWS_BUILD 0
+#endif
+
+#if WINDOWS_BUILD == 1
+#include <io.h>
+#warning "Compiling for Win discludes network support."
+#else
+#include "net_support.h"
+#endif
 
 static const uint32_t ACCESS_CODE_T1_C1 = 0b0101010101010000111101u;
 static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0x3FFFFFu;
@@ -908,6 +921,10 @@ static void shift_freq_plus_minus325(float *iplus, float *qplus, float *iminus, 
 
 int main(int argc, char *argv[])
 {
+    #if WINDOWS_BUILD == 1
+    _setmode(_fileno(stdin), _O_BINARY);
+    #endif
+
     process_options(argc, argv);
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
