@@ -17,21 +17,16 @@ COMMIT_HASH?=$(shell git log --pretty=format:'%H' -n 1)
 TAG?=$(shell git describe --tags)
 BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 CHANGES?=$(shell git status -s | grep -v '?? ')
-TAG_COMMIT_HASH?=$(shell git show-ref --tags | grep $(TAG) | cut -f 1 -d ' ')
 
+# Prefix with any development branch.
 ifeq ($(BRANCH),master)
   BRANCH:=
 else
   BRANCH:=$(BRANCH)_
 endif
 
-ifeq ($(COMMIT),$(TAG_COMMIT))
-  # Exactly on the tagged commit. The version is the tag!
-  VERSION:=$(BRANCH)$(TAG)
-else
-  # We are on a commit after the tag!
-  VERSION:=$(BRANCH)$(TAG)++
-endif
+# The version is the git tag or tag-N-hash if there are N commits after the tag.
+VERSION:=$(BRANCH)$(TAG)
 
 ifneq ($(strip $(CHANGES)),)
   # There are local non-committed changes! Add this to the version string as well!
