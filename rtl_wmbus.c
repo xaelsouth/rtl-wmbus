@@ -811,6 +811,7 @@ static void print_usage(const char *program_name)
 static void print_version(void)
 {
     fprintf(stdout, "rtl_wmbus: " VERSION "\n");
+    fprintf(stdout, COMMIT "\n");
 }
 
 static void process_options(int argc, char *argv[])
@@ -857,6 +858,7 @@ static void process_options(int argc, char *argv[])
             break;
         case 'V':
             print_version();
+            exit(EXIT_SUCCESS);
             break;
         default:
             print_usage(argv[0]);
