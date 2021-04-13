@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fixedptc/fixedptc.h>
+#include "build/version.h"
 #include "fir.h"
 #include "iir.h"
 #include "ppf.h"
@@ -796,21 +797,27 @@ static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2; // Is not implemented as
 
 static void print_usage(const char *program_name)
 {
+    fprintf(stdout, "rtl_wmbus: " VERSION "\n\n");
     fprintf(stdout, "Usage %s:\n", program_name);
     fprintf(stdout, "\t-a accelerate (use an inaccurate atan version)\n");
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
     fprintf(stdout, "\t-v show used algorithm in the output\n");
+    fprintf(stdout, "\t-V show version\n");
     fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.625MHz (-f 868.625M)\n");
 }
 
+static void print_version(void)
+{
+    fprintf(stdout, "rtl_wmbus: " VERSION "\n");
+}
 
 static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "ad:r:vst:")) != -1)
+    while ((option = getopt(argc, argv, "ad:r:vVst:")) != -1)
     {
         switch (option)
         {
@@ -847,6 +854,9 @@ static void process_options(int argc, char *argv[])
             break;
         case 'v':
             opts_show_used_algorithm = 1;
+            break;
+        case 'V':
+            print_version();
             break;
         default:
             print_usage(argv[0]);
@@ -1150,4 +1160,3 @@ int main(int argc, char *argv[])
     free(LUT_FREQUENCY_TRANSLATION_PLUS_SINE);
     return EXIT_SUCCESS;
 }
-
