@@ -55,6 +55,14 @@
 #include "net_support.h"
 #endif
 
+#ifndef TIME2_ALGORITHM_ENABLED
+#define TIME2_ALGORITHM_ENABLED 1
+#endif
+
+#ifndef RUN_LENGTH_ALGORITHM_ENABLED
+#define RUN_LENGTH_ALGORITHM_ENABLED 1
+#endif
+
 static const uint32_t ACCESS_CODE_T1_C1 = 0b0101010101010000111101u;
 static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0x3FFFFFu;
 static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
@@ -786,11 +794,13 @@ static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorit
 
 
 static int opts_run_length_algorithm_enabled = 1;
-static int opts_time2_algorithm_enabled = 1;
+static int opts_time2_algorithm_enabled = TIME2_ALGORITHM_ENABLED;
 static unsigned opts_decimation_rate = 2u;
 static int opts_s1_t1_c1_simultaneously = 0;
 static int opts_accurate_atan = 1;
 int opts_show_used_algorithm = 0;
+static int opts_t1_c1_processing_enabled = 1;
+static int opts_s1_processing_enabled = 1;
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2; // Is not implemented as option yet.
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2; // Is not implemented as option yet.
 
@@ -806,6 +816,7 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-v show used algorithm in the output\n");
     fprintf(stdout, "\t-V show version\n");
     fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.625MHz (-f 868.625M)\n");
+    fprintf(stdout, "\t-p [T,S] to disable processing T1/C1 or S1 mode.\n");
 }
 
 static void print_version(void)
@@ -818,12 +829,27 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "ad:r:vVst:")) != -1)
+    while ((option = getopt(argc, argv, "ad:p:r:vVst:")) != -1)
     {
         switch (option)
         {
         case 'a':
             opts_accurate_atan = 0;
+            break;
+        case 'p':
+            if (strcmp(optarg, "T") == 0 || strcmp(optarg, "t") == 0)
+            {
+                opts_t1_c1_processing_enabled = 0;
+            }
+            else if (strcmp(optarg, "S") == 0 || strcmp(optarg, "s") == 0)
+            {
+                opts_s1_processing_enabled = 0;
+            }
+            else
+            {
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'r':
             if (strcmp(optarg, "0") == 0)
@@ -931,6 +957,190 @@ static void shift_freq_plus_minus325(float *iplus, float *qplus, float *iminus, 
     *qminus = qx - iz;
 }
 
+typedef void (*t1_c1_signal_chain_prototype)(float i_t1_c1, float q_t1_c1,
+                                             struct time2_algorithm_t1_c1 *t2_algo_t1_c1,
+                                             struct runlength_algorithm_t1_c1 *rl_algo_t1_c1,
+                                             float (*polar_discriminator_t1_c1_function)(float i, float q));
+
+void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
+                        struct time2_algorithm_t1_c1 *t2_algo_t1_c1,
+                        struct runlength_algorithm_t1_c1 *rl_algo_t1_c1,
+                        float (*polar_discriminator_t1_c1_function)(float i, float q))
+{
+    static int16_t old_clock_t1_c1 = INT16_MIN;
+    static unsigned clock_lock_t1_c1 = 0;
+
+    // Demodulate.
+    const float _delta_phi_t1_c1 = polar_discriminator_t1_c1_function(i_t1_c1, q_t1_c1);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
+
+    // Post-filtering to prevent bit errors because of signal jitter.
+    const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
+    //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
+    //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
+
+    // Get the bit!
+    unsigned bit_t1_c1 = (delta_phi_t1_c1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
+    //int16_t u = bit ? (INT16_MAX-1) : 0;
+    //fwrite(&u, sizeof(u), 1, rawbits_out);
+
+    // --- rssi filtering section begin ---
+    // We are using one simple filter to rssi value in order to
+    // prevent unexpected "splashes" in signal power.
+    float rssi_t1_c1 = sqrtf(i_t1_c1*i_t1_c1 + q_t1_c1*q_t1_c1);
+    rssi_t1_c1 = rssi_filter_t1_c1(rssi_t1_c1); // comment out, if rssi filtering is unwanted
+    // --- rssi filtering section end ---
+
+    // --- runlength algorithm section begin ---
+    #if RUN_LENGTH_ALGORITHM_ENABLED
+    if (opts_run_length_algorithm_enabled)
+    {
+        runlength_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, rl_algo_t1_c1);
+    }
+    #endif
+    // --- runlength algorithm section end ---
+
+
+    // --- time2 algorithm section begin ---
+    #if TIME2_ALGORITHM_ENABLED
+    if (opts_time2_algorithm_enabled)
+    {
+        // --- clock recovery section begin ---
+        // The time-2 method is implemented: push squared signal through a bandpass
+        // tuned close to the symbol rate. Saturating band-pass output produces a
+        // rectangular pulses with the required timing information.
+        // Clock-Signal is crossing zero in half period.
+        const int16_t clock_t1_c1 = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi_t1_c1 * delta_phi_t1_c1) >= 0) ? INT16_MAX : INT16_MIN;
+        //fwrite(&clock, sizeof(clock), 1, clock_out);
+
+        if (clock_t1_c1 > old_clock_t1_c1)
+        {   // Clock signal rising edge detected.
+            clock_lock_t1_c1 = 1;
+        }
+        else if (clock_t1_c1 == INT16_MAX)
+        {   // Clock signal is still high.
+            if (clock_lock_t1_c1 < opts_CLOCK_LOCK_THRESHOLD_T1_C1)
+            {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_T1_C1 - 1) clock bits
+                // to get closer to the middle of the data bit.
+                clock_lock_t1_c1++;
+            }
+            else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
+            {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
+                clock_lock_t1_c1++;
+                time2_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
+                //int16_t u = bit ? (INT16_MAX-1) : 0;
+                //fwrite(&u, sizeof(u), 1, bits_out);
+            }
+        }
+        old_clock_t1_c1 = clock_t1_c1;
+        // --- clock recovery section end ---
+    }
+    #endif
+    // --- time2 algorithm section end ---
+}
+
+void t1_c1_signal_chain_empty(float i_t1_c1, float q_t1_c1,
+                              struct time2_algorithm_t1_c1 *t2_algo_t1_c1,
+                              struct runlength_algorithm_t1_c1 *rl_algo_t1_c1,
+                              float (*polar_discriminator_t1_c1_function)(float i, float q))
+{
+}
+
+typedef void (*s1_signal_chain_prototype)(float i_s1, float q_s1,
+                                          struct time2_algorithm_s1 *t2_algo_s1,
+                                          struct runlength_algorithm_s1 *rl_algo_s1,
+                                          float (*polar_discriminator_s1_function)(float i, float q));
+
+void s1_signal_chain(float i_s1, float q_s1,
+                      struct time2_algorithm_s1 *t2_algo_s1,
+                      struct runlength_algorithm_s1 *rl_algo_s1,
+                      float (*polar_discriminator_s1_function)(float i, float q))
+{
+    static int16_t old_clock_s1 = INT16_MIN;
+    static unsigned clock_lock_s1 = 0;
+
+    // Demodulate.
+    const float _delta_phi_s1 = polar_discriminator_s1_function(i_s1, q_s1);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
+
+    // Post-filtering to prevent bit errors because of signal jitter.
+    const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
+    //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
+    //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
+
+    // Get the bit!
+    unsigned bit_s1 = (delta_phi_s1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
+    //int16_t u = bit ? (INT16_MAX-1) : 0;
+    //fwrite(&u, sizeof(u), 1, rawbits_out);
+
+    // --- rssi filtering section begin ---
+    // We are using one simple filter to rssi value in order to
+    // prevent unexpected "splashes" in signal power.
+    float rssi_s1 = sqrtf(i_s1*i_s1 + q_s1*q_s1);
+    rssi_s1 = rssi_filter_s1(rssi_s1); // comment out, if rssi filtering is unwanted
+    // --- rssi filtering section end ---
+
+    // --- runlength algorithm section begin ---
+    #if RUN_LENGTH_ALGORITHM_ENABLED
+    if (opts_run_length_algorithm_enabled)
+    {
+        runlength_algorithm_s1(bit_s1, rssi_s1, rl_algo_s1);
+    }
+    #endif
+    // --- runlength algorithm section end ---
+
+
+    // --- time2 algorithm section begin ---
+    #if TIME2_ALGORITHM_ENABLED
+    if (opts_time2_algorithm_enabled)
+    {
+        // --- clock recovery section begin ---
+        // The time-2 method is implemented: push squared signal through a bandpass
+        // tuned close to the symbol rate. Saturating band-pass output produces a
+        // rectangular pulses with the required timing information.
+        // Clock-Signal is crossing zero in half period.
+        const int16_t clock_s1 = (bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(delta_phi_s1 * delta_phi_s1) >= 0) ? INT16_MAX : INT16_MIN;
+        //fwrite(&clock, sizeof(clock), 1, clock_out);
+
+        if (clock_s1 > old_clock_s1)
+        {   // Clock signal rising edge detected.
+            clock_lock_s1 = 1;
+        }
+        else if (clock_s1 == INT16_MAX)
+        {   // Clock signal is still high.
+            if (clock_lock_s1 < opts_CLOCK_LOCK_THRESHOLD_S1)
+            {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_S1 - 1) clock bits
+                // to get closer to the middle of the data bit.
+                clock_lock_s1++;
+            }
+            else if (clock_lock_s1 == opts_CLOCK_LOCK_THRESHOLD_S1)
+            {   // Sample data bit at CLOCK_LOCK_THRESHOLD_S1 clock bit position.
+                clock_lock_s1++;
+                time2_algorithm_s1(bit_s1, rssi_s1, t2_algo_s1);
+                //int16_t u = bit ? (INT16_MAX-1) : 0;
+                //fwrite(&u, sizeof(u), 1, bits_out);
+            }
+        }
+        old_clock_s1 = clock_s1;
+        // --- clock recovery section end ---
+    }
+    #endif
+    // --- time2 algorithm section end ---
+}
+
+void s1_signal_chain_empty(float i_s1, float q_s1,
+                           struct time2_algorithm_s1 *t2_algo_s1,
+                           struct runlength_algorithm_s1 *rl_algo_s1,
+                           float (*polar_discriminator_s1_function)(float i, float q))
+{
+}
+
 int main(int argc, char *argv[])
 {
     #if WINDOWS_BUILD == 1
@@ -943,9 +1153,9 @@ int main(int argc, char *argv[])
     const int fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
     float i_t1_c1, q_t1_c1;
     float i_s1, q_s1;
+
+
     unsigned decimation_rate_index = 0;
-    int16_t old_clock_t1_c1 = INT16_MIN, old_clock_s1 = INT16_MIN;
-    unsigned clock_lock_t1_c1 = 0, clock_lock_s1 = 0;
 
     struct time2_algorithm_t1_c1 t2_algo_t1_c1;
     time2_algorithm_t1_c1_reset(&t2_algo_t1_c1);
@@ -958,6 +1168,9 @@ int main(int argc, char *argv[])
 
     struct runlength_algorithm_s1 rl_algo_s1;
     runlength_algorithm_reset_s1(&rl_algo_s1);
+
+    t1_c1_signal_chain_prototype process_t1_c1_chain = opts_t1_c1_processing_enabled ? t1_c1_signal_chain: t1_c1_signal_chain_empty;
+    s1_signal_chain_prototype process_s1_chain = opts_s1_processing_enabled ? s1_signal_chain : s1_signal_chain_empty;
 
     float (*polar_discriminator_t1_c1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_t1_c1 : polar_discriminator_t1_c1_inaccurate;
     float (*polar_discriminator_s1_function)(float i, float q) = opts_accurate_atan ? polar_discriminator_s1 : polar_discriminator_s1_inaccurate;
@@ -995,8 +1208,8 @@ int main(int argc, char *argv[])
 
         for (size_t k = 0; k < sizeof(samples)/sizeof(samples[0]); k += 2)   // +2 : i and q interleaved
         {
-            const float i_unfilt = ((float)samples[k]     - 127.5f);
-            const float q_unfilt = ((float)samples[k + 1] - 127.5f);
+            const float i_unfilt = ((float)(samples[k])     - 127.5f);
+            const float q_unfilt = ((float)(samples[k + 1]) - 127.5f);
 
             // rtl_sdr -f 868.35M -s 2400000 - 2>/dev/null | build/rtl_wmbus -d 3
             //shift_freq(&i_unfilt, &q_unfilt, 600, 2400);
@@ -1015,145 +1228,30 @@ int main(int argc, char *argv[])
 
             // Low-Pass-Filtering before decimation is necessary, to ensure
             // that i and q signals don't contain frequencies above new sample
-            // rate.
-            // The sample rate decimation is realised as sum over i and q,
-            // which must not be divided by decimation factor before
-            // demodulating (atan2(q,i)).
-#if 0
-            i_t1_c1 = lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(i_t1_c1_unfilt, 0);
-            q_t1_c1 = lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(q_t1_c1_unfilt, 1);
-
-            i_s1 = lp_fir_butter_1600kHz_160kHz_200kHz_s1(i_s1_unfilt, 0);
-            q_s1 = lp_fir_butter_1600kHz_160kHz_200kHz_s1(q_s1_unfilt, 1);
-#elif 0
-            i = lp_ppf_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
-            q = lp_ppf_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
-#elif 0
-            i = lp_firfp_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
-            q = lp_firfp_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
-#elif 0
-            i = lp_ppffp_butter_1600kHz_160kHz_200kHz(i_unfilt, 0);
-            q = lp_ppffp_butter_1600kHz_160kHz_200kHz(q_unfilt, 1);
-#else
-            // Moving average can be viewed as a low pass filter.
-
+            // rate. Moving average can be viewed as a low pass filter.
             i_t1_c1 = moving_average_t1_c1(i_t1_c1_unfilt, 0);
             q_t1_c1 = moving_average_t1_c1(q_t1_c1_unfilt, 1);
 
-            i_s1 = moving_average_s1(i_s1_unfilt, 0);
-            q_s1 = moving_average_s1(q_s1_unfilt, 1);
-#endif
-
             #if 0
             equalizer_complex_t1_c1(&i_t1_c1, &q_t1_c1);
+            #endif
+
+            // Low-Pass-Filtering before decimation is necessary, to ensure
+            // that i and q signals don't contain frequencies above new sample
+            // rate. Moving average can be viewed as a low pass filter.
+            i_s1 = moving_average_s1(i_s1_unfilt, 0);
+            q_s1 = moving_average_s1(q_s1_unfilt, 1);
+
+            #if 0
+            equalizer_complex_s1(&i_s1, &q_s1); // FIXME: Function does not exist.
             #endif
 
             ++decimation_rate_index;
             if (decimation_rate_index < opts_decimation_rate) continue;
             decimation_rate_index = 0;
 
-            // Demodulate.
-            const float _delta_phi_t1_c1 = polar_discriminator_t1_c1_function(i_t1_c1, q_t1_c1);
-            const float _delta_phi_s1 = polar_discriminator_s1_function(i_s1, q_s1);
-            //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
-            //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
-
-            // Post-filtering to prevent bit errors because of signal jitter.
-            const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
-            const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
-            //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-            //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
-            //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
-            //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
-
-            // Get the bit!
-            unsigned bit_t1_c1 = (delta_phi_t1_c1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
-            unsigned bit_s1 = (delta_phi_s1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
-            //int16_t u = bit ? (INT16_MAX-1) : 0;
-            //fwrite(&u, sizeof(u), 1, rawbits_out);
-
-
-            // --- rssi filtering section begin ---
-            // We are using one simple filter to rssi value in order to
-            // prevent unexpected "splashes" in signal power.
-            float rssi_t1_c1 = sqrtf(i_t1_c1*i_t1_c1 + q_t1_c1*q_t1_c1);
-            rssi_t1_c1 = rssi_filter_t1_c1(rssi_t1_c1); // comment out, if rssi filtering is unwanted
-
-            float rssi_s1 = sqrtf(i_s1*i_s1 + q_s1*q_s1);
-            rssi_s1 = rssi_filter_s1(rssi_s1); // comment out, if rssi filtering is unwanted
-            // --- rssi filtering section end ---
-
-
-            // --- runlength algorithm section begin ---
-            #if 1
-            if (opts_run_length_algorithm_enabled)
-            {
-                runlength_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, &rl_algo_t1_c1);
-
-                runlength_algorithm_s1(bit_s1, rssi_s1, &rl_algo_s1);
-            }
-            #endif
-            // --- runlength algorithm section end ---
-
-
-            // --- time2 algorithm section begin ---
-            #if 1
-            if (opts_time2_algorithm_enabled)
-            {
-                // --- clock recovery section begin ---
-                // The time-2 method is implemented: push squared signal through a bandpass
-                // tuned close to the symbol rate. Saturating band-pass output produces a
-                // rectangular pulses with the required timing information.
-                // Clock-Signal is crossing zero in half period.
-                const int16_t clock_t1_c1 = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi_t1_c1 * delta_phi_t1_c1) >= 0) ? INT16_MAX : INT16_MIN;
-                const int16_t clock_s1 = (bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(delta_phi_s1 * delta_phi_s1) >= 0) ? INT16_MAX : INT16_MIN;
-                //fwrite(&clock, sizeof(clock), 1, clock_out);
-
-                if (clock_t1_c1 > old_clock_t1_c1)
-                {   // Clock signal rising edge detected.
-                    clock_lock_t1_c1 = 1;
-                }
-                else if (clock_t1_c1 == INT16_MAX)
-                {   // Clock signal is still high.
-                    if (clock_lock_t1_c1 < opts_CLOCK_LOCK_THRESHOLD_T1_C1)
-                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_T1_C1 - 1) clock bits
-                        // to get closer to the middle of the data bit.
-                        clock_lock_t1_c1++;
-                    }
-                    else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
-                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
-                        clock_lock_t1_c1++;
-                        time2_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, &t2_algo_t1_c1);
-                        //int16_t u = bit ? (INT16_MAX-1) : 0;
-                        //fwrite(&u, sizeof(u), 1, bits_out);
-                    }
-                }
-                old_clock_t1_c1 = clock_t1_c1;
-
-                if (clock_s1 > old_clock_s1)
-                {   // Clock signal rising edge detected.
-                    clock_lock_s1 = 1;
-                }
-                else if (clock_s1 == INT16_MAX)
-                {   // Clock signal is still high.
-                    if (clock_lock_s1 < opts_CLOCK_LOCK_THRESHOLD_S1)
-                    {   // Skip up to (opts_CLOCK_LOCK_THRESHOLD_S1 - 1) clock bits
-                        // to get closer to the middle of the data bit.
-                        clock_lock_s1++;
-                    }
-                    else if (clock_lock_s1 == opts_CLOCK_LOCK_THRESHOLD_S1)
-                    {   // Sample data bit at CLOCK_LOCK_THRESHOLD_S1 clock bit position.
-                        clock_lock_s1++;
-                        time2_algorithm_s1(bit_s1, rssi_s1, &t2_algo_s1);
-                        //int16_t u = bit ? (INT16_MAX-1) : 0;
-                        //fwrite(&u, sizeof(u), 1, bits_out);
-                    }
-                }
-                old_clock_s1 = clock_s1;
-                // --- clock recovery section end ---
-            }
-            #endif
-            // --- time2 algorithm section end ---
+            process_t1_c1_chain(i_t1_c1, q_t1_c1, &t2_algo_t1_c1, &rl_algo_t1_c1, polar_discriminator_t1_c1_function);
+            process_s1_chain(i_s1, q_s1, &t2_algo_s1, &rl_algo_s1, polar_discriminator_s1_function);
         }
     }
 

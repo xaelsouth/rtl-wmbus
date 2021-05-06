@@ -14,7 +14,7 @@ $(shell $(MKDIR) -p $(OUTDIR))
 
 # Create a version number based on the latest git tag.
 COMMIT_HASH?=$(shell git log --pretty=format:'%H' -n 1)
-TAG?=$(shell git describe --tags)
+TAG?=$(shell git describe --tags --always)
 BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 CHANGES?=$(shell git status -s | grep -v '?? ')
 
@@ -62,7 +62,7 @@ pi1:
 rebuild: clean all
 
 install: release
-	cp $(OUTFILE) /usr/bin
+	cp -f $(OUTFILE) /usr/bin
 
 clean:
 	$(RM) -rf "$(OUTDIR)"
