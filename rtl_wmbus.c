@@ -978,7 +978,6 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     // Post-filtering to prevent bit errors because of signal jitter.
     const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
     //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-    //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
@@ -1069,7 +1068,6 @@ void s1_signal_chain(float i_s1, float q_s1,
 
     // Post-filtering to prevent bit errors because of signal jitter.
     const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
-    //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
     //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
