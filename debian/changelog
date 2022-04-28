@@ -1,0 +1,5 @@
+rtl-wmbus (0.0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #998720)
+
+ -- Petter Reinholdtsen <pere@debian.org>  Thu, 28 Apr 2022 07:17:49 +0200

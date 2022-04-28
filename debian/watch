@@ -1,0 +1,8 @@
+# See uscan(1) for format
+
+# Compulsory line, this is a version 4 file
+version=4
+
+opts="filenamemangle=s%(?:.*?)?v?(\d[\d.]*)\.tar\.gz%rtl-wmbus-$1.tar.gz%" \
+   https://github.com/xaelsouth/rtl-wmbus/tags \
+   (?:.*?/)?v?(\d[\d.]*)\.tar\.gz debian uupdate

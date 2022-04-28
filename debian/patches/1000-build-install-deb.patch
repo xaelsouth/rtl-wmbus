@@ -1,0 +1,27 @@
+Description: Adjust build system to work with Debian packagin
+Author: Petter Reinholdtsen <pere@debian.org>
+Forwarded: https://github.com/xaelsouth/rtl-wmbus/pull/33
+Reviewed-By: Petter Reinholdtsen <pere@hungry.com>
+Last-Update: 2022-04-28
+
+--- rtl-wmbus-0.0.orig/Makefile
++++ rtl-wmbus-0.0/Makefile
+@@ -5,7 +5,7 @@ STRIP=strip
+ 
+ OUTDIR?=build
+ OUTFILE="$(OUTDIR)/rtl_wmbus"
+-CFLAGS?=-Iinclude -std=gnu99
++CFLAGS+=-Iinclude -std=gnu99
+ CFLAGS_WARNINGS?=-Wall -W -Waggregate-return -Wbad-function-cast -Wcast-align -Wcast-qual -Wchar-subscripts -Wcomment -Wno-float-equal -Winline -Wmain -Wmissing-noreturn -Wno-missing-prototypes -Wparentheses -Wpointer-arith -Wredundant-decls -Wreturn-type -Wshadow -Wsign-compare -Wstrict-prototypes -Wswitch -Wunreachable-code -Wno-unused -Wuninitialized
+ LIB?=-lm
+ SRC=rtl_wmbus.c
+@@ -62,7 +62,8 @@ pi1:
+ rebuild: clean all
+ 
+ install: release
+-	cp -f $(OUTFILE) /usr/bin
++	install -d $(DESTDIR)/usr/bin
++	install $(OUTFILE) $(DESTDIR)/usr/bin
+ 
+ clean:
+ 	$(RM) -rf "$(OUTDIR)"
