@@ -2,7 +2,7 @@ Source: rtl-wmbus
 Section: unknown
 Priority: optional
 Maintainer: Petter Reinholdtsen <pere@debian.org>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 11)
 Standards-Version: 4.5.1
 Homepage: https://github.com/xaelsouth/rtl-wmbus
 Vcs-Browser: https://github.com/xaelsouth/rtl-wmbus
