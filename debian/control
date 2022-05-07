@@ -1,0 +1,18 @@
+Source: rtl-wmbus
+Section: unknown
+Priority: optional
+Maintainer: Petter Reinholdtsen <pere@debian.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://github.com/xaelsouth/rtl-wmbus
+Vcs-Browser: https://github.com/xaelsouth/rtl-wmbus
+Vcs-Git: https://github.com/xaelsouth/rtl-wmbus.git
+Rules-Requires-Root: no
+
+Package: rtl-wmbus
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+ , rtl-sdr
+Description: software defined receiver for Wireless-M-Bus with RTL-SDR
+ Allow for receiving meter data via radio according to an European
+ standard for remote reading of smart meters.
