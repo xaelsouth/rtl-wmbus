@@ -61,7 +61,8 @@ pi1:
 
 rebuild: clean all
 
-install: release
+install:
+	@if [ ! -f $(OUTFILE) ] ; then echo "Cannot find the binary to install! You have to run just \"make\" first!" ; exit 1 ; fi
 	install -d $(DESTDIR)/usr/bin
 	install $(OUTFILE) $(DESTDIR)/usr/bin
 
