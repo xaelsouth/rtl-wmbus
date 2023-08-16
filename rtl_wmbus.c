@@ -1175,7 +1175,7 @@ int main(int argc, char *argv[])
     #if WINDOWS_BUILD == 1
     _setmode(_fileno(stdin), _O_BINARY);
     #else
-    if (isatty(0))
+    if (isatty(0) && argc == 1)
     {
         // Standard input is a terminal, print help.
         print_usage(argv[0]);
