@@ -48,6 +48,14 @@
 #define WINDOWS_BUILD 0
 #endif
 
+#if WINDOWS_BUILD == 0
+#define CHECK_FLOW 1
+#include <signal.h>
+#include <unistd.h>
+#else
+#define CHECK_FLOW 0
+#endif
+
 #if WINDOWS_BUILD == 1
 #include <io.h>
 #warning "Compiling for Win discludes network support."
@@ -801,6 +809,7 @@ static int opts_accurate_atan = 1;
 int opts_show_used_algorithm = 0;
 static int opts_t1_c1_processing_enabled = 1;
 static int opts_s1_processing_enabled = 1;
+static int opts_check_flow = 0;
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_T1_C1 = 2; // Is not implemented as option yet.
 static const unsigned opts_CLOCK_LOCK_THRESHOLD_S1 = 2; // Is not implemented as option yet.
 
@@ -817,6 +826,8 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-V show version\n");
     fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.625MHz (-f 868.625M)\n");
     fprintf(stdout, "\t-p [T,S] to disable processing T1/C1 or S1 mode.\n");
+    fprintf(stdout, "\t-f exit if flow of incoming data stops.\n");
+    fprintf(stdout, "\t-h print this help\n");
 }
 
 static void print_version(void)
@@ -829,10 +840,16 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "ad:p:r:vVst:")) != -1)
+    while ((option = getopt(argc, argv, "fad:p:r:vVst:")) != -1)
     {
         switch (option)
         {
+        case 'f':
+            opts_check_flow = 1;
+#if CHECK_FLOW == 0
+            fprintf(stderr, "rtl_wmbus: Warning! You supplied the option -f but this build of rtl_wmbus cannot check flow of incoming data!\n");
+#endif
+            break;
         case 'a':
             opts_accurate_atan = 0;
             break;
@@ -1139,13 +1156,48 @@ void s1_signal_chain_empty(float i_s1, float q_s1,
 {
 }
 
+#if CHECK_FLOW == 1
+#define START_ALARM if (opts_check_flow) { alarm(2); }
+#define STOP_ALARM if (opts_check_flow) { alarm(0); }
+
+static void sig_alarm_handler(int signo)
+{
+    fprintf(stderr, "rtl_wmbus: exiting since incoming data stopped flowing!\n");
+    exit(1);
+}
+#else
+#define START_ALARM
+#define STOP_ALARM
+#endif
+
 int main(int argc, char *argv[])
 {
     #if WINDOWS_BUILD == 1
     _setmode(_fileno(stdin), _O_BINARY);
+    #else
+    if (isatty(0) && argc == 1)
+    {
+        // Standard input is a terminal, print help.
+        print_usage(argv[0]);
+        exit(0);
+    }
     #endif
 
     process_options(argc, argv);
+#if CHECK_FLOW == 1
+    struct sigaction old_alarm;
+    struct sigaction new_alarm;
+
+    if (opts_check_flow)
+    {
+        new_alarm.sa_handler = sig_alarm_handler;
+        sigemptyset(&new_alarm.sa_mask);
+        new_alarm.sa_flags = 0;
+
+        fprintf(stderr, "rtl_wmbus: monitoring flow\n");
+        sigaction(SIGALRM, &new_alarm, &old_alarm);
+    }
+#endif
 
     __attribute__((__aligned__(16))) uint8_t samples[4096];
     const int fs_kHz = opts_decimation_rate*800; // Sample rate [kHz] as a multiple of 800 kHz.
@@ -1197,7 +1249,9 @@ int main(int argc, char *argv[])
 
     while (!feof(input))
     {
+        START_ALARM;
         size_t read_items = fread(samples, sizeof(samples), 1, input);
+        STOP_ALARM;
         if (1 != read_items)
         {
             // End of file?..
@@ -1252,6 +1306,13 @@ int main(int argc, char *argv[])
             process_s1_chain(i_s1, q_s1, &t2_algo_s1, &rl_algo_s1, polar_discriminator_s1_function);
         }
     }
+
+    #if CHECK_FLOW == 1
+    if (opts_check_flow)
+    {
+        sigaction(SIGALRM, &old_alarm, NULL);
+    }
+    #endif
 
     if (input != stdin) fclose(input);
     free(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE);
