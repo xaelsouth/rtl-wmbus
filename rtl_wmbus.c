@@ -79,13 +79,13 @@
 #define S1_DC_OFFSET_ALPHA 0.999f
 #endif
 
-static const uint32_t ACCESS_CODE_T1_C1 = 0b0101010101010000111101u;
-static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0x3FFFFFu;
-static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
+static const uint32_t ACCESS_CODE_T1_C1 = 0x543d;
+static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0xFFFFu;
+static const unsigned ACCESS_CODE_T1_C1_ERRORS = 0u; // 0 if no errors allowed
 
-static const uint32_t ACCESS_CODE_S1 = 0b000111011010010110u;
-static const uint32_t ACCESS_CODE_S1_BITMASK = 0x3FFFFu;
-static const unsigned ACCESS_CODE_S1_ERRORS = 1u; // 0 if no errors allowed
+static const uint32_t ACCESS_CODE_S1 = 0x547696;
+static const uint32_t ACCESS_CODE_S1_BITMASK = 0xFFFFFFu;
+static const unsigned ACCESS_CODE_S1_ERRORS = 0u; // 0 if no errors allowed
 
 
 /* deglitch_filter_t1_c1 has been calculated by a Python script as follows.
@@ -1066,7 +1066,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
         // rectangular pulses with the required timing information.
         // Clock-Signal is crossing zero in half period.
         const int16_t clock_t1_c1 = (bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(delta_phi_t1_c1 * delta_phi_t1_c1) >= 0) ? INT16_MAX : INT16_MIN;
-        //fwrite(&clock, sizeof(clock), 1, clock_out);
+        //fwrite(&clock_t1_c1, sizeof(clock_t1_c1), 1, clock_out);
 
         if (clock_t1_c1 > old_clock_t1_c1)
         {   // Clock signal rising edge detected.
@@ -1083,7 +1083,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
             {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
                 clock_lock_t1_c1++;
                 time2_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
-                //int16_t u = bit ? (INT16_MAX-1) : 0;
+                //int16_t u = bit_t1_c1 ? (INT16_MAX-1) : 0;
                 //fwrite(&u, sizeof(u), 1, bits_out);
             }
         }
@@ -1158,7 +1158,7 @@ void s1_signal_chain(float i_s1, float q_s1,
         // rectangular pulses with the required timing information.
         // Clock-Signal is crossing zero in half period.
         const int16_t clock_s1 = (bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(delta_phi_s1 * delta_phi_s1) >= 0) ? INT16_MAX : INT16_MIN;
-        //fwrite(&clock, sizeof(clock), 1, clock_out);
+        //fwrite(&clock_s1, sizeof(clock_s1), 1, clock_out);
 
         if (clock_s1 > old_clock_s1)
         {   // Clock signal rising edge detected.
@@ -1212,7 +1212,11 @@ int main(int argc, char *argv[])
     #if WINDOWS_BUILD == 1
     _setmode(_fileno(stdin), _O_BINARY);
     #else
-    if (isatty(0) && argc == 1)
+    if (argc == 1
+#ifndef DEBUG
+        && isatty(0)
+#endif
+        )
     {
         // Standard input is a terminal, print help.
         print_usage(argv[0]);
@@ -1267,7 +1271,7 @@ int main(int argc, char *argv[])
     //input = fopen("samples/kamstrup.bin", "rb");
     //input = fopen("samples/c1_mode_b.bin", "rb");
     //input = fopen("samples/t1_c1a_mixed.bin", "rb");
-    //input = fopen("samples/s1_samples.bin", "rb");
+    //input = fopen("rtlsdr_868.95M_1M6_amiplus_notdecoded.bin.002", "rb");
     //input = get_net("localhost", 14423);
 
     if (input == NULL)
