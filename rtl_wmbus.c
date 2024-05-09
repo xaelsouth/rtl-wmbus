@@ -48,19 +48,31 @@
 #define WINDOWS_BUILD 0
 #endif
 
-#if WINDOWS_BUILD == 0
+#if WINDOWS_BUILD == 1
+#define CHECK_FLOW 0
+
+#include <io.h>
+
+#warning "Compiling for Win discludes network support."
+
+static inline void START_ALARM(void) {}
+static inline void STOP_ALARM(void)  {}
+
+#else
 #define CHECK_FLOW 1
+
 #include <signal.h>
 #include <unistd.h>
-#else
-#define CHECK_FLOW 0
-#endif
-
-#if WINDOWS_BUILD == 1
-#include <io.h>
-#warning "Compiling for Win discludes network support."
-#else
 #include "net_support.h"
+
+static inline void START_ALARM(void) { alarm(2); }
+static inline void STOP_ALARM(void)  { alarm(0); }
+
+static void sig_alarm_handler(int signo)
+{
+    fprintf(stderr, "rtl_wmbus: exiting since incoming data stopped flowing!\n");
+    exit(EXIT_FAILURE);
+}
 #endif
 
 #ifndef TIME2_ALGORITHM_ENABLED
@@ -1193,20 +1205,6 @@ void s1_signal_chain_empty(float i_s1, float q_s1,
 {
 }
 
-#if CHECK_FLOW == 1
-#define START_ALARM if (opts_check_flow) { alarm(2); }
-#define STOP_ALARM if (opts_check_flow) { alarm(0); }
-
-static void sig_alarm_handler(int signo)
-{
-    fprintf(stderr, "rtl_wmbus: exiting since incoming data stopped flowing!\n");
-    exit(1);
-}
-#else
-#define START_ALARM
-#define STOP_ALARM
-#endif
-
 int main(int argc, char *argv[])
 {
     #if WINDOWS_BUILD == 1
@@ -1225,6 +1223,7 @@ int main(int argc, char *argv[])
     #endif
 
     process_options(argc, argv);
+
 #if CHECK_FLOW == 1
     struct sigaction old_alarm;
     struct sigaction new_alarm;
@@ -1290,9 +1289,10 @@ int main(int argc, char *argv[])
 
     while (!feof(input))
     {
-        START_ALARM;
+        if (opts_check_flow) START_ALARM();
         size_t read_items = fread(samples, sizeof(samples), 1, input);
-        STOP_ALARM;
+        if (opts_check_flow) STOP_ALARM();
+
         if (1 != read_items)
         {
             // End of file?..
@@ -1348,12 +1348,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    #if CHECK_FLOW == 1
     if (opts_check_flow)
     {
+        #if CHECK_FLOW == 1
         sigaction(SIGALRM, &old_alarm, NULL);
+        #endif
     }
-    #endif
 
     if (input != stdin) fclose(input);
     free(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE);
