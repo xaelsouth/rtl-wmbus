@@ -63,6 +63,14 @@
 #define RUN_LENGTH_ALGORITHM_ENABLED 1
 #endif
 
+#ifndef T1_C1_DC_OFFSET_ALPHA
+#define T1_C1_DC_OFFSET_ALPHA 0.992f
+#endif
+
+#ifndef S1_DC_OFFSET_ALPHA
+#define S1_DC_OFFSET_ALPHA 0.999f
+#endif
+
 static const uint32_t ACCESS_CODE_T1_C1 = 0b0101010101010000111101u;
 static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0x3FFFFFu;
 static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
@@ -121,6 +129,13 @@ static const uint8_t deglitch_filter_s1[16] = {
     // 1000 1001 1010 1011 1100 1101 1110 1111
          0,   1,   1,   1,   1,   1,   1,   1
 };
+
+
+//static FILE *demod_out = NULL;
+//static FILE *demod_out2 = NULL;
+//static FILE *clock_out = NULL;
+//static FILE *bits_out = NULL;
+//static FILE *rawbits_out = NULL;
 
 
 static inline float moving_average_t1_c1(float sample, size_t i_or_q)
@@ -453,6 +468,26 @@ static float rssi_filter_s1(float sample)
 #undef ALPHA
 
     return old_sample;
+}
+
+static float s1_remove_dc_offset_demod(float x, float alpha)
+{
+  static float x_old, y_old;
+
+  y_old = x - x_old + alpha*y_old;
+  x_old = x;
+
+  return y_old;
+}
+
+static float t1_c1_remove_dc_offset_demod(float x, float alpha)
+{
+  static float x_old, y_old;
+
+  y_old = x - x_old + alpha*y_old;
+  x_old = x;
+
+  return y_old;
 }
 
 static inline float polar_discriminator_t1_c1(float i, float q)
@@ -976,9 +1011,10 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
     // Post-filtering to prevent bit errors because of signal jitter.
-    const float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
-    //const float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
+    //float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
+    delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1, T1_C1_DC_OFFSET_ALPHA);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_t1_c1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
     // Get the bit!
@@ -1067,9 +1103,10 @@ void s1_signal_chain(float i_s1, float q_s1,
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out);
 
     // Post-filtering to prevent bit errors because of signal jitter.
-    const float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
-    //const float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
-    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi;
+    float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
+    //float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
+    delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1, S1_DC_OFFSET_ALPHA);
+    //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_s1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
 
     // Get the bit!
@@ -1187,11 +1224,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    //FILE *demod_out = fopen("demod.bin", "wb");
-    //FILE *demod_out2 = fopen("demod.bin", "wb");
-    //FILE *clock_out = fopen("clock.bin", "wb");
-    //FILE *bits_out = fopen("bits.bin", "wb");
-    //FILE *rawbits_out = fopen("rawbits.bin", "wb");
+    //demod_out = fopen("demod.bin", "wb");
+    //demod_out2 = fopen("demod2.bin", "wb");
+    //clock_out = fopen("clock.bin", "wb");
+    //bits_out = fopen("bits.bin", "wb");
+    //rawbits_out = fopen("rawbits.bin", "wb");
 
     setup_lookup_tables_for_frequency_translation(fs_kHz);
 
