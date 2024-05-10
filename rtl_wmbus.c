@@ -152,7 +152,8 @@ static const uint8_t deglitch_filter_s1[16] = {
 
 
 //static FILE *demod_out = NULL;
-//static FILE *demod_out2 = NULL;
+static FILE *demod_out2_t1_c1 = NULL;
+static FILE *demod_out2_s1 = NULL;
 //static FILE *clock_out = NULL;
 //static FILE *bits_out = NULL;
 //static FILE *rawbits_out = NULL;
@@ -872,8 +873,8 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-v show used algorithm in the output\n");
     fprintf(stdout, "\t-V show version\n");
     fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.625MHz (-f 868.625M)\n");
-    fprintf(stdout, "\t-p [T,S] to disable processing T1/C1 or S1 mode.\n");
-    fprintf(stdout, "\t-f exit if flow of incoming data stops.\n");
+    fprintf(stdout, "\t-p [T,S] to disable processing T1/C1 or S1 mode\n");
+    fprintf(stdout, "\t-f exit if flow of incoming data stops\n");
     fprintf(stdout, "\t-h print this help\n");
 }
 
@@ -1044,7 +1045,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     //float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
     delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1, T1_C1_DC_OFFSET_ALPHA);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_t1_c1;
-    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_t1_c1);
 
     // Get the bit!
     unsigned bit_t1_c1 = (delta_phi_t1_c1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
@@ -1136,7 +1137,7 @@ void s1_signal_chain(float i_s1, float q_s1,
     //float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
     delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1, S1_DC_OFFSET_ALPHA);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_s1;
-    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2);
+    //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_s1);
 
     // Get the bit!
     unsigned bit_s1 = (delta_phi_s1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : (0u<<PACKET_DATABIT_SHIFT);
@@ -1210,17 +1211,15 @@ int main(int argc, char *argv[])
     #if WINDOWS_BUILD == 1
     _setmode(_fileno(stdin), _O_BINARY);
     #else
-    if (argc == 1
-#ifndef DEBUG
-        && isatty(0)
-#endif
-        )
+    #ifndef DEBUG
+    if (argc == 1 && isatty(0))
     {
         // Standard input is a terminal, print help.
         print_usage(argv[0]);
         exit(0);
     }
-    #endif
+    #endif /* DEBUG */
+    #endif /* WINDOWS_BUILD == 1 */
 
     process_options(argc, argv);
 
@@ -1280,7 +1279,8 @@ int main(int argc, char *argv[])
     }
 
     //demod_out = fopen("demod.bin", "wb");
-    //demod_out2 = fopen("demod2.bin", "wb");
+    //demod_out2_t1_c1 = fopen("demod2_t1_c1.bin", "wb");
+    //demod_out2_s1 = fopen("demod2_s1.bin", "wb");
     //clock_out = fopen("clock.bin", "wb");
     //bits_out = fopen("bits.bin", "wb");
     //rawbits_out = fopen("rawbits.bin", "wb");
@@ -1356,6 +1356,8 @@ int main(int argc, char *argv[])
     }
 
     if (input != stdin) fclose(input);
+    if (demod_out2_t1_c1 != NULL) fclose(demod_out2_t1_c1);
+    if (demod_out2_s1 != NULL) fclose(demod_out2_s1);
     free(LUT_FREQUENCY_TRANSLATION_PLUS_COSINE);
     free(LUT_FREQUENCY_TRANSLATION_PLUS_SINE);
     return EXIT_SUCCESS;
