@@ -276,6 +276,8 @@
 			Filters=""
 			GUID="{3483AD1D-7C36-49D7-B257-47CBFC0918FE}"></Folder>
 	</CustomFolders>
+	<List Name="RTE">
+	</List>
 	<Files AutoFolders="DirectoryView">
 		<Folder Name="build">
 			<F N="build/version.h"/>
@@ -287,6 +289,8 @@
 				<F N="include/fixedptc/test.c"/>
 				<F N="include/fixedptc/verify.c"/>
 			</Folder>
+			<F N="include/mode_s_util.h"/>
+			<F N="include/mode_t_util.h"/>
 		</Folder>
 		<F N="atan2.h"/>
 		<F N="fir.h"/>
@@ -299,6 +303,4 @@
 		<F N="s1_packet_decoder.h"/>
 		<F N="t1_c1_packet_decoder.h"/>
 	</Files>
-	<List Name="RTE">
-	</List>
 </Project>

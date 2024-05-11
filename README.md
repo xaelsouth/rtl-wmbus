@@ -10,7 +10,8 @@ The primary purpose of rtl-wmbus is experimenting with digital signal processing
 
 rtl-wmbus provides:
  * filtering
- * FSK demodulating
+ * FSK demodulation
+ * dc offset removing
  * clock recovering
  * mode T1 and mode C1 packet decoding
  * mode S1 packet decoding
@@ -51,11 +52,11 @@ For Windows users:
    Usage
    -----
 To save an I/Q-stream on disk and decode that off-line:
- * rtl_sdr samples.bin -f 868.95M -s 1600000
- * cat samples.bin | build/rtl_wmbus
+ * rtl_sdr samples.cu8 -f 868.95M -s 1600000
+ * cat samples.cu8 | build/rtl_wmbus
 
 To save an I/Q-stream and decode this immediately to see what's going on right now:
- * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | tee samples.bin | build/rtl_wmbus
+ * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | tee samples.cu8 | build/rtl_wmbus
 
 To run continuously without saving anything on disk:
  * rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus
@@ -67,11 +68,11 @@ To run continuously with rx_sdr (or even with a higher sampling and decimation r
 Notice "-d 5" in the last line: it's a multiple of 800kHz resulting from the sample rate of 4MHz.
 
 To count "good" (no 3 out of 6 errors, no checksum errors) packets:
- * cat samples.bin | build/rtl_wmbus 2>/dev/null | grep "[T,C,S]1;1;1" | wc -l
+ * cat samples.cu8 | build/rtl_wmbus 2>/dev/null | grep "[T,C,S]1;1;1" | wc -l
 
 Carrier-frequency given at "-f" must be set properly. With my DVB-T-Receiver I had to choose carrier 50kHz under the standard of 868.95MHz. Sample rate at 1.6Ms/s should be used or use a multiple of 800kHz. RTL-SDR supports sampling rate up to 3.2 MSamples, so you can choose 1.6 MSamples, 2.4 MSamples or 3.2 MSamples.
 
-See samples/samples2.bin for a live example with two T1 mode devices inside.
+See samples/rtlsdr_868.950M_1M6_samples2.cu8 for an example of two T1 mode devices.
 
 On Android the driver must be started first with options given above. I/Q-data goes to a port which is to be set in the driver settings. Use get_net to get I/Q-data into rtl_wmbus.
 
@@ -136,7 +137,7 @@ Alalons (have I thanked you already?!) proposed a speed optimized arctan functio
   License
   -------
 
-Copyright (c) 2021 <xael.south@yandex.com>
+Copyright (c) 2024 <xael.south@yandex.com>
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
 are met:

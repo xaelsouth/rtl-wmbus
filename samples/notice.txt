@@ -1,5 +1,0 @@
-Recorded by a rtlsdr DVB-T receiver of nothing else is mentionied in the filename.
-
-The sample rate of all recordings is 1.6 MSamples/sec if nothing else is mentioned in the filename.
-
-The rx frequency is 868.95MHz if nothing else is mentioned in the filename.
