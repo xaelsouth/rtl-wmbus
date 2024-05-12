@@ -84,7 +84,7 @@ static void sig_alarm_handler(int signo)
 #endif
 
 #ifndef T1_C1_DC_OFFSET_ALPHA
-#define T1_C1_DC_OFFSET_ALPHA 0.992f
+#define T1_C1_DC_OFFSET_ALPHA 0.999f
 #endif
 
 #ifndef S1_DC_OFFSET_ALPHA
@@ -491,21 +491,21 @@ static float rssi_filter_s1(float sample)
     return old_sample;
 }
 
-static float s1_remove_dc_offset_demod(float x, float alpha)
+static float s1_remove_dc_offset_demod(float x)
 {
   static float x_old, y_old;
 
-  y_old = x - x_old + alpha*y_old;
+  y_old = (1.f + S1_DC_OFFSET_ALPHA)/2.f * (x - x_old) + S1_DC_OFFSET_ALPHA * y_old;
   x_old = x;
 
   return y_old;
 }
 
-static float t1_c1_remove_dc_offset_demod(float x, float alpha)
+static float t1_c1_remove_dc_offset_demod(float x)
 {
   static float x_old, y_old;
 
-  y_old = x - x_old + alpha*y_old;
+  y_old = (1.f + T1_C1_DC_OFFSET_ALPHA)/2.f * (x - x_old) + T1_C1_DC_OFFSET_ALPHA * y_old;
   x_old = x;
 
   return y_old;
@@ -1047,7 +1047,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
     //float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-    if (opts_remove_dc_offset) delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1, T1_C1_DC_OFFSET_ALPHA);
+    if (opts_remove_dc_offset) delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_t1_c1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_t1_c1);
 
@@ -1139,7 +1139,7 @@ void s1_signal_chain(float i_s1, float q_s1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
     //float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
-    if (opts_remove_dc_offset) delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1, S1_DC_OFFSET_ALPHA);
+    if (opts_remove_dc_offset) delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_s1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_s1);
 
