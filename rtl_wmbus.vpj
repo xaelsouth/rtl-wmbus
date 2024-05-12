@@ -282,24 +282,59 @@
 		<Folder Name="build">
 			<F N="build/version.h"/>
 		</Folder>
+		<Folder Name="debian">
+			<Folder Name="patches">
+				<F N="debian/patches/1000-build-install-deb.patch"/>
+				<F N="debian/patches/README"/>
+				<F N="debian/patches/series"/>
+			</Folder>
+			<Folder Name="source">
+				<F N="debian/source/format"/>
+			</Folder>
+			<F N="debian/changelog"/>
+			<F N="debian/control"/>
+			<F N="debian/copyright"/>
+			<F
+				N="debian/rules"
+				Type="Makefile"/>
+			<F N="debian/watch"/>
+		</Folder>
+		<Folder Name="filter">
+			<F N="filter/bp_iir_cheb1_1600kHz_90kHz_98kHz_102kHz_110kHz.m"/>
+			<F N="filter/bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz.m"/>
+			<F N="filter/bp_iir_cheb1_800kHz_90kHz_98Hz_102kHz_110kHz.m"/>
+			<F N="filter/lp_fir_butter_1600kHz_160kHz_200kHz.m"/>
+			<F N="filter/lp_fir_butter_800kHz_100kHz_160kHz.m"/>
+			<F N="filter/lp_fir_butter_800kHz_32kHz_36kHz.m"/>
+			<F N="filter/lp_ppf_butter_1600kHz_160kHz_200kHz.m"/>
+			<F N="filter/print_fir_filter_coef.m"/>
+			<F N="filter/print_iir_filter_coef.m"/>
+			<F N="filter/print_ppf_filter_coef.m"/>
+			<F N="filter/rtl_wmbus.m"/>
+		</Folder>
 		<Folder Name="include">
 			<Folder Name="fixedptc">
 				<F N="include/fixedptc/fixedptc.h"/>
 				<F N="include/fixedptc/Makefile"/>
+				<F N="include/fixedptc/README.txt"/>
 				<F N="include/fixedptc/test.c"/>
 				<F N="include/fixedptc/verify.c"/>
 			</Folder>
 			<F N="include/mode_s_util.h"/>
 			<F N="include/mode_t_util.h"/>
 		</Folder>
+		<F N="androidbuild.bat"/>
 		<F N="atan2.h"/>
+		<F N="build-deb.sh"/>
 		<F N="fir.h"/>
 		<F N="iir.h"/>
 		<F N="Makefile"/>
 		<F N="moving_average_filter.h"/>
 		<F N="net_support.h"/>
 		<F N="ppf.h"/>
+		<F N="README.md"/>
 		<F N="rtl_wmbus.c"/>
+		<F N="rtl_wmbus.py"/>
 		<F N="s1_packet_decoder.h"/>
 		<F N="t1_c1_packet_decoder.h"/>
 	</Files>

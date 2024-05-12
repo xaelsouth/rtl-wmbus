@@ -133,6 +133,10 @@ Optimization on frequencies translation by rearranging compute steps implemented
 
 Alalons (have I thanked you already?!) proposed a speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly. I have seen that on receiving C1 mode datagrams - that's why the speed optimized version is not in use by default. A speed optimized arctan version can be activated by "-a" in the program options.
 
+A new options "-o", which means "remove dc offset", was introduced. The overall sensitivity is better _without_ removing dc offset, so the user must start rtl_wmbus with this option:
+ * cat samples/rtlsdr_868.950M_1M6_issue47.cu8 | build/rtl_wmbus -o
+ * cat samples/rtlsdr_868.950M_1M6_issue49.cu8 | build/rtl_wmbus -o
+ * cat samples/rtlsdr_868.625M_2M4_issue48.cu8 | build/rtl_wmbus -d 3 -s -o
 
   License
   -------

@@ -854,6 +854,7 @@ static int opts_time2_algorithm_enabled = TIME2_ALGORITHM_ENABLED;
 static unsigned opts_decimation_rate = 2u;
 static int opts_s1_t1_c1_simultaneously = 0;
 static int opts_accurate_atan = 1;
+static int opts_remove_dc_offset = 0;
 int opts_show_used_algorithm = 0;
 static int opts_t1_c1_processing_enabled = 1;
 static int opts_s1_processing_enabled = 1;
@@ -888,10 +889,13 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "fad:p:r:vVst:")) != -1)
+    while ((option = getopt(argc, argv, "ofad:p:r:vVst:")) != -1)
     {
         switch (option)
         {
+        case 'o':
+          opts_remove_dc_offset = 1;
+          break;
         case 'f':
             opts_check_flow = 1;
 #if CHECK_FLOW == 0
@@ -1043,7 +1047,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
     //float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-    delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1, T1_C1_DC_OFFSET_ALPHA);
+    if (opts_remove_dc_offset) delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1, T1_C1_DC_OFFSET_ALPHA);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_t1_c1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_t1_c1);
 
@@ -1135,7 +1139,7 @@ void s1_signal_chain(float i_s1, float q_s1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
     //float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
-    delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1, S1_DC_OFFSET_ALPHA);
+    if (opts_remove_dc_offset) delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1, S1_DC_OFFSET_ALPHA);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_s1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_s1);
 
