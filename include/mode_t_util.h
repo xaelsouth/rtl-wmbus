@@ -1,4 +1,117 @@
 #ifndef MODE_T_UTIL_H
 #define MODE_T_UTIL_H
 
+/*-
+ * Copyright (c) 2024 <xael.south@yandex.com>
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+#include <stdint.h>
+#include <stddef.h>
+
+#ifndef SMALL_3OUTOF6_ENCODING_TABLE
+#define SMALL_3OUTOF6_ENCODING_TABLE 0
+#endif
+
+
+#if SMALL_3OUTOF6_ENCODING_TABLE
+static const uint8_t encoding_tab_3oufof6[16] = {
+  0x16, 0x0D, 0x0E, 0x0B, 0x1C, 0x19, 0x1A, 0x13, 0x2C, 0x25, 0x26, 0x23, 0x34, 0x31, 0x32, 0x29
+};
+#else
+static const uint16_t encoding_tab_3oufof6[256] = {
+  0x0596, 0x058d, 0x058e, 0x058b, 0x059c, 0x0599, 0x059a, 0x0593, 0x05ac, 0x05a5, 0x05a6, 0x05a3, 0x05b4, 0x05b1, 0x05b2, 0x05a9,
+  0x0356, 0x034d, 0x034e, 0x034b, 0x035c, 0x0359, 0x035a, 0x0353, 0x036c, 0x0365, 0x0366, 0x0363, 0x0374, 0x0371, 0x0372, 0x0369,
+  0x0396, 0x038d, 0x038e, 0x038b, 0x039c, 0x0399, 0x039a, 0x0393, 0x03ac, 0x03a5, 0x03a6, 0x03a3, 0x03b4, 0x03b1, 0x03b2, 0x03a9,
+  0x02d6, 0x02cd, 0x02ce, 0x02cb, 0x02dc, 0x02d9, 0x02da, 0x02d3, 0x02ec, 0x02e5, 0x02e6, 0x02e3, 0x02f4, 0x02f1, 0x02f2, 0x02e9,
+  0x0716, 0x070d, 0x070e, 0x070b, 0x071c, 0x0719, 0x071a, 0x0713, 0x072c, 0x0725, 0x0726, 0x0723, 0x0734, 0x0731, 0x0732, 0x0729,
+  0x0656, 0x064d, 0x064e, 0x064b, 0x065c, 0x0659, 0x065a, 0x0653, 0x066c, 0x0665, 0x0666, 0x0663, 0x0674, 0x0671, 0x0672, 0x0669,
+  0x0696, 0x068d, 0x068e, 0x068b, 0x069c, 0x0699, 0x069a, 0x0693, 0x06ac, 0x06a5, 0x06a6, 0x06a3, 0x06b4, 0x06b1, 0x06b2, 0x06a9,
+  0x04d6, 0x04cd, 0x04ce, 0x04cb, 0x04dc, 0x04d9, 0x04da, 0x04d3, 0x04ec, 0x04e5, 0x04e6, 0x04e3, 0x04f4, 0x04f1, 0x04f2, 0x04e9,
+  0x0b16, 0x0b0d, 0x0b0e, 0x0b0b, 0x0b1c, 0x0b19, 0x0b1a, 0x0b13, 0x0b2c, 0x0b25, 0x0b26, 0x0b23, 0x0b34, 0x0b31, 0x0b32, 0x0b29,
+  0x0956, 0x094d, 0x094e, 0x094b, 0x095c, 0x0959, 0x095a, 0x0953, 0x096c, 0x0965, 0x0966, 0x0963, 0x0974, 0x0971, 0x0972, 0x0969,
+  0x0996, 0x098d, 0x098e, 0x098b, 0x099c, 0x0999, 0x099a, 0x0993, 0x09ac, 0x09a5, 0x09a6, 0x09a3, 0x09b4, 0x09b1, 0x09b2, 0x09a9,
+  0x08d6, 0x08cd, 0x08ce, 0x08cb, 0x08dc, 0x08d9, 0x08da, 0x08d3, 0x08ec, 0x08e5, 0x08e6, 0x08e3, 0x08f4, 0x08f1, 0x08f2, 0x08e9,
+  0x0d16, 0x0d0d, 0x0d0e, 0x0d0b, 0x0d1c, 0x0d19, 0x0d1a, 0x0d13, 0x0d2c, 0x0d25, 0x0d26, 0x0d23, 0x0d34, 0x0d31, 0x0d32, 0x0d29,
+  0x0c56, 0x0c4d, 0x0c4e, 0x0c4b, 0x0c5c, 0x0c59, 0x0c5a, 0x0c53, 0x0c6c, 0x0c65, 0x0c66, 0x0c63, 0x0c74, 0x0c71, 0x0c72, 0x0c69,
+  0x0c96, 0x0c8d, 0x0c8e, 0x0c8b, 0x0c9c, 0x0c99, 0x0c9a, 0x0c93, 0x0cac, 0x0ca5, 0x0ca6, 0x0ca3, 0x0cb4, 0x0cb1, 0x0cb2, 0x0ca9,
+  0x0a56, 0x0a4d, 0x0a4e, 0x0a4b, 0x0a5c, 0x0a59, 0x0a5a, 0x0a53, 0x0a6c, 0x0a65, 0x0a66, 0x0a63, 0x0a74, 0x0a71, 0x0a72, 0x0a69,
+};
+#endif
+
+size_t encode_channel_3outof6(uint8_t* encoded_payload,
+							  const uint8_t* payload,
+							  size_t payload_size) {
+  const uint8_t* const encoded_payload_begin = encoded_payload;
+
+  /* Clear least significant bit. */
+  const size_t N_2_bytes = payload_size & ~(1u << 0);
+
+  size_t i;
+  for (i = 0; i < N_2_bytes; i += 2) {
+	const unsigned tmp =
+#if SMALL_3OUTOF6_ENCODING_TABLE
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 0] >> 4]   << 18) |
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 0] & 0x0F] << 12) |
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 1] >> 4]   <<  6) |
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 1] & 0x0F] <<  0);
+#else
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 0]] << 12) |
+						 ((unsigned)encoding_tab_3oufof6[payload[i + 1]] <<  0);
+#endif
+
+	*encoded_payload++ = tmp >> 16;
+	*encoded_payload++ = tmp >>  8;
+	*encoded_payload++ = tmp >>  0;
+  }
+
+  if (payload_size & 1) {
+	/* Payload size is odd. */
+	unsigned tmp =
+#if SMALL_3OUTOF6_ENCODING_TABLE
+				   ((unsigned)encoding_tab_3oufof6[payload[i + 0] >> 4]   << 18) |
+				   ((unsigned)encoding_tab_3oufof6[payload[i + 0] & 0x0F] << 12);
+#else
+				   ((unsigned)encoding_tab_3oufof6[payload[i + 0]] << 12);
+#endif
+
+	if (payload[i + 0] & 1) /* Least significant bit is one? */
+	  tmp |= 0x14 << 6;
+	else
+	  tmp |= 0x28 << 6;
+
+	*encoded_payload++ = tmp >> 16;
+	*encoded_payload++ = tmp >>  8;
+  }
+  else {
+	/* Payload size is even. */
+	if (payload[i + 0] & 1) /* Least significant bit is one? */
+	  *encoded_payload++ = 0x55;
+	else
+	  *encoded_payload++ = 0xAA;
+  }
+
+  return encoded_payload - encoded_payload_begin;
+}
+
 #endif /* MODE_T_UTIL_H */
