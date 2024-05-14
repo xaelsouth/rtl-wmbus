@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #if !defined(PACKET_CAPTURE_THRESHOLD)
 #define PACKET_CAPTURE_THRESHOLD  5u
@@ -388,11 +387,7 @@ static void t1_rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_dec
     }
     else
     {
-        time_t now;
-        time(&now);
-
-        struct tm *timeinfo = gmtime(&now);
-        strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
+        make_time_string(decoder->timestamp, sizeof(decoder->timestamp));
     }
 }
 
@@ -460,11 +455,7 @@ static void c1_rx_last_data_bit(unsigned bit, struct t1_c1_packet_decoder_work *
     }
     else
     {
-        time_t now;
-        time(&now);
-
-        struct tm *timeinfo = gmtime(&now);
-        strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
+        make_time_string(decoder->timestamp, sizeof(decoder->timestamp));
     }
 }
 

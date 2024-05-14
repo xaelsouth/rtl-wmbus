@@ -323,6 +323,9 @@
 			<F N="include/mode_s_util.h"/>
 			<F N="include/mode_t_util.h"/>
 		</Folder>
+		<Folder Name="samples">
+			<F N="samples/readme.txt"/>
+		</Folder>
 		<F N="androidbuild.bat"/>
 		<F N="atan2.h"/>
 		<F N="build-deb.sh"/>
@@ -335,6 +338,7 @@
 		<F N="README.md"/>
 		<F N="rtl_wmbus.c"/>
 		<F N="rtl_wmbus.py"/>
+		<F N="rtl_wmbus_util.h"/>
 		<F N="s1_packet_decoder.h"/>
 		<F N="t1_c1_packet_decoder.h"/>
 	</Files>

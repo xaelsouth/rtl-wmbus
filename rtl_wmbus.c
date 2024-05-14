@@ -32,21 +32,24 @@
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 #include <fixedptc/fixedptc.h>
-#include "build/version.h"
-#include "fir.h"
-#include "iir.h"
-#include "ppf.h"
-#include "moving_average_filter.h"
-#include "atan2.h"
-#include "t1_c1_packet_decoder.h"
-#include "s1_packet_decoder.h"
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #define WINDOWS_BUILD 1
 #else
 #define WINDOWS_BUILD 0
 #endif
+
+#include "build/version.h"
+#include "fir.h"
+#include "iir.h"
+#include "ppf.h"
+#include "moving_average_filter.h"
+#include "atan2.h"
+#include "rtl_wmbus_util.h"
+#include "t1_c1_packet_decoder.h"
+#include "s1_packet_decoder.h"
 
 #if WINDOWS_BUILD == 1
 #define CHECK_FLOW 0
@@ -867,6 +870,7 @@ static void print_usage(const char *program_name)
 {
     fprintf(stdout, "rtl_wmbus: " VERSION "\n\n");
     fprintf(stdout, "Usage %s:\n", program_name);
+    fprintf(stdout, "\t-o remove DC offset\n");
     fprintf(stdout, "\t-a accelerate (use an inaccurate atan version)\n");
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");

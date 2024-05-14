@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 static const uint8_t MANCHESTER_IEEE_802_3[4] = {
     0xFF, 0x01, 0x00, 0xFF // According to wireless MBus spec.: "01b” representing a “one”; "10b" representing a "zero".
@@ -227,11 +226,7 @@ static void s1_rx_last_data_bit(unsigned bit, struct s1_packet_decoder_work *dec
     }
     else
     {
-        time_t now;
-        time(&now);
-
-        struct tm *timeinfo = gmtime(&now);
-        strftime(decoder->timestamp, sizeof(decoder->timestamp), "%Y-%m-%d %H:%M:%S.000", timeinfo);
+        make_time_string(decoder->timestamp, sizeof(decoder->timestamp));
     }
 }
 
