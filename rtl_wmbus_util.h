@@ -27,7 +27,7 @@ inline int make_time_string(char* timestamp, size_t timestamp_size)
 	return -1;
 
   struct tm timeinfo;
-  if (localtime_r(&tv.tv_sec, &timeinfo) == NULL)
+  if (gmtime_r(&tv.tv_sec, &timeinfo) == NULL)
 	return -1;
 
   char fmt[timestamp_size];
