@@ -42,6 +42,8 @@ typedef struct
     const float *const a; // 3 coeff, first of these is assumed to be 1
 
     float *hist; // 3 taps
+
+    float *state; // 2 zero-initialized delays per transposed section
 } IIRF_FILTER;
 
 float iirf(float sample, IIRF_FILTER *filter);
@@ -74,6 +76,22 @@ float iirf(float sample, IIRF_FILTER *filter)
     sample *= filter->gain;
 
     return sample;
+}
+
+/* Transposed direct-form II: two delay values per biquad, zero-initialized. */
+float iirf_transposed(float sample, const IIRF_FILTER *filter)
+{
+    for (size_t i = 0; i < filter->sections; ++i)
+    {
+        const float *a = filter->a + 3 * i;
+        const float *b = filter->b + 3 * i;
+        float *delay = filter->state + 2 * i;
+        const float output = b[0] * sample + delay[0];
+        delay[0] = (b[1] * sample - a[1] * output) + delay[1];
+        delay[1] = b[2] * sample - a[2] * output;
+        sample = output;
+    }
+    return sample * filter->gain;
 }
 
 #endif /* IIR_H */

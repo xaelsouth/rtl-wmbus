@@ -7,7 +7,7 @@
 #endif
 
 
-inline int make_time_string(char* timestamp, size_t timestamp_size)
+int make_time_string(char* timestamp, size_t timestamp_size)
 {
   memset(timestamp, 0, timestamp_size);
 

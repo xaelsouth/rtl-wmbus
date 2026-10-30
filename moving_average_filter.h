@@ -42,14 +42,17 @@ typedef struct
     int sum;
 } MAVGI_FILTER;
 
-float mavgi(int sample, MAVGI_FILTER *filter);
-
-float mavgi(int sample, MAVGI_FILTER *filter)
+int mavgi_update(int sample, MAVGI_FILTER *filter)
 {
     filter->sum = filter->sum - filter->hist[filter->i] + sample;
     filter->hist[filter->i++] = sample;
     if (filter->i >= filter->length) filter->i = 0;
 
+    return filter->sum;
+}
+
+float mavgi(const MAVGI_FILTER *filter)
+{
     return (float)filter->sum / filter->length;
 }
 
@@ -64,7 +67,8 @@ static int test_mavgi(void)
 
     for (int sample = 0; sample < 20; sample++)
     {
-        printf("%f, ", mavgi(sample, &filter));
+        mavgi_update(sample, &filter);
+        printf("%f, ", mavgi(&filter));
     }
     printf("\n");
 

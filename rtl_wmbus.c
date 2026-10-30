@@ -42,6 +42,7 @@
 #endif
 
 #include "build/version.h"
+#include "rtlwmbus_settings.h"
 #include "fir.h"
 #include "iir.h"
 #include "ppf.h"
@@ -76,14 +77,6 @@ static void sig_alarm_handler(int signo)
     fprintf(stderr, "rtl_wmbus: exiting since incoming data stopped flowing!\n");
     exit(EXIT_FAILURE);
 }
-#endif
-
-#ifndef TIME2_ALGORITHM_ENABLED
-#define TIME2_ALGORITHM_ENABLED 1
-#endif
-
-#ifndef RUN_LENGTH_ALGORITHM_ENABLED
-#define RUN_LENGTH_ALGORITHM_ENABLED 1
 #endif
 
 #ifndef T1_C1_DC_OFFSET_ALPHA
@@ -162,37 +155,25 @@ static FILE *demod_out2_s1 = NULL;
 //static FILE *rawbits_out = NULL;
 
 
-static inline float moving_average_t1_c1(float sample, size_t i_or_q)
-{
 #define COEFFS 8
-    static int i_hist[COEFFS];
-    static int q_hist[COEFFS];
-
-    static MAVGI_FILTER filter[2] =                                         // i/q
-    {
-        {.length = COEFFS, .hist = i_hist}, //  0
-        {.length = COEFFS, .hist = q_hist}  //  1
-    };
-#undef COEFFS
-
-    return mavgi(sample, &filter[i_or_q]);
-}
-
-static inline float moving_average_s1(float sample, size_t i_or_q)
+static int moving_average_t1_c1_i_hist[COEFFS];
+static int moving_average_t1_c1_q_hist[COEFFS];
+static MAVGI_FILTER moving_average_t1_c1[2] =
 {
-#define COEFFS 16
-    static int i_hist[COEFFS];
-    static int q_hist[COEFFS];
-
-    static MAVGI_FILTER filter[2] =                                         // i/q
-    {
-        {.length = COEFFS, .hist = i_hist}, //  0
-        {.length = COEFFS, .hist = q_hist}  //  1
-    };
+    {.length = COEFFS, .hist = moving_average_t1_c1_i_hist, .sum = 0},
+    {.length = COEFFS, .hist = moving_average_t1_c1_q_hist, .sum = 0}
+};
 #undef COEFFS
 
-    return mavgi(sample, &filter[i_or_q]);
-}
+#define COEFFS 16
+static int moving_average_s1_i_hist[COEFFS];
+static int moving_average_s1_q_hist[COEFFS];
+static MAVGI_FILTER moving_average_s1[2] =
+{
+    {.length = COEFFS, .hist = moving_average_s1_i_hist, .sum = 0},
+    {.length = COEFFS, .hist = moving_average_s1_q_hist, .sum = 0}
+};
+#undef COEFFS
 
 static inline float lp_fir_butter_1600kHz_160kHz_200kHz_t1_c1(float sample, size_t i_or_q)
 {
@@ -340,12 +321,15 @@ static inline float bp_iir_cheb1_800kHz_90kHz_98kHz_102kHz_110kHz(float sample)
     static const float b[3*SECTIONS] = {1, 1.999994649, 0.9999946492, 1, -1.99999482, 0.9999948196, 1, 1.703868036e-07, -1.000010531, };
     static const float a[3*SECTIONS] = {1, -1.387139203, 0.9921518712, 1, -1.403492665, 0.9845934971, 1, -1.430055639, 0.9923856172, };
     static float hist[3*SECTIONS] = {};
-
-    static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist};
+    static float state[2 * SECTIONS];
+    static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist, .state = state};
+#if IIR_TRANSPOSED
+    return iirf_transposed(sample, &filter);
+#else
+    return iirf(sample, &filter);
+#endif
 #undef SECTIONS
 #undef GAIN
-
-    return iirf(sample, &filter);
 }
 
 static inline float bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(float sample)
@@ -355,27 +339,27 @@ static inline float bp_iir_cheb1_800kHz_22kHz_30kHz_34kHz_42kHz(float sample)
     static const float b[3*SECTIONS] = {1, 1.999994187, 0.9999941867, 1, -1.999994026,0.9999940262, 1, -1.605750097e-07, -1.000011787, };
     static const float a[3*SECTIONS] = {1, -1.92151475, 0.9918135499, 1, -1.922481015,0.984593497, 1, -1.937432099, 0.9927241336, };
     static float hist[3*SECTIONS] = {};
-
-    static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist};
-
+    static float state[2 * SECTIONS];
+    static IIRF_FILTER filter = {.sections = SECTIONS, .b = b, .a = a, .gain = GAIN, .hist = hist, .state = state};
+#if IIR_TRANSPOSED
+    return iirf_transposed(sample, &filter);
+#else
+    return iirf(sample, &filter);
+#endif
 #undef SECTIONS
 #undef GAIN
-
-    return iirf(sample, &filter);
 }
-
-
 
 static inline float lp_fir_butter_800kHz_100kHz_160kHz(float sample)
 {
 #define COEFFS 11
     static float b[COEFFS] = {-0.00456638213, -0.002571450348, 0.02689425925, 0.1141330398, 0.2264456422, 0.2793297826, 0.2264456422, 0.1141330398, 0.02689425925, -0.002571450348, -0.00456638213, };
-    static float hist[COEFFS];
+    static float hist[2 * COEFFS];
 
     static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
 #undef COEFFS
 
-    return firf(sample, &filter);
+    return firf_mirrored(sample, &filter);
 }
 
 static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
@@ -383,12 +367,12 @@ static inline float lp_fir_butter_800kHz_32kHz_36kHz(float sample)
 #define COEFFS 46
     static float b[COEFFS] = {-0.000649081282, -0.0009491938209, -0.001361601657, -0.001910785234, -0.002570133495, -0.003251218426, -0.003801634695, -0.004012672882, -0.003636803575, -0.002413585945, -0.0001013597693, 0.003488892085, 0.008461671287, 0.01481127545, 0.02240598045, 0.03098477999, 0.0401679839, 0.04948137286, 0.05839197924, 0.06635211627, 0.07284719662, 0.07744230649, 0.07982251613, 0.07982251613, 0.07744230649, 0.07284719662, 0.06635211627, 0.05839197924, 0.04948137286, 0.0401679839, 0.03098477999, 0.02240598045, 0.01481127545, 0.008461671287, 0.003488892085, -0.0001013597693, -0.002413585945, -0.003636803575, -0.004012672882, -0.003801634695, -0.003251218426, -0.002570133495, -0.001910785234, -0.001361601657, -0.0009491938209, -0.000649081282, };
 
-    static float hist[COEFFS];
+    static float hist[2 * COEFFS];
 
     static FIRF_FILTER filter = {.length = COEFFS, .b = b, .hist = hist};
 #undef COEFFS
 
-    return firf(sample, &filter);
+    return firf_mirrored(sample, &filter);
 }
 
 /* https://liquidsdr.org/blog/lms-equalizer/ */
@@ -520,12 +504,10 @@ static inline float polar_discriminator_t1_c1(float i, float q)
     const float complex s = i + q * _Complex_I;
     const float complex y = s * conjf(s_last);
 
-#if 1
-    const float delta_phi = atan2_libm(y);
-#elif 0
-    const float delta_phi = atan2_approximation(y);
-#else
+#if ATAN2_APPROX_ENABLED
     const float delta_phi = atan2_approximation2(y);
+#else
+    const float delta_phi = atan2_libm(y);
 #endif
 
     s_last = s;
@@ -556,12 +538,10 @@ static inline float polar_discriminator_s1(float i, float q)
     const float complex s = i + q * _Complex_I;
     const float complex y = s * conjf(s_last);
 
-#if 1
-    const float delta_phi = atan2_libm(y);
-#elif 0
-    const float delta_phi = atan2_approximation(y);
-#else
+#if ATAN2_APPROX_ENABLED
     const float delta_phi = atan2_approximation2(y);
+#else
+    const float delta_phi = atan2_libm(y);
 #endif
 
     s_last = s;
@@ -986,7 +966,7 @@ static void setup_lookup_tables_for_frequency_translation(int fs_kHz)
 
     for (size_t n = 0; n < n_max; n++)
     {
-        const double phi = (2. * M_PI * (ft_kHz * n)) / fs_kHz;
+        const float phi = (2. * M_PI * (ft_kHz * n)) / fs_kHz;
         LUT_FREQUENCY_TRANSLATION_PLUS_COSINE[n] = cosf(phi);
         LUT_FREQUENCY_TRANSLATION_PLUS_SINE[n] = -sinf(phi); // Minus sinf!
     }
@@ -1330,8 +1310,8 @@ int main(int argc, char *argv[])
             // Low-Pass-Filtering before decimation is necessary, to ensure
             // that i and q signals don't contain frequencies above new sample
             // rate. Moving average can be viewed as a low pass filter.
-            i_t1_c1 = moving_average_t1_c1(i_t1_c1_unfilt, 0);
-            q_t1_c1 = moving_average_t1_c1(q_t1_c1_unfilt, 1);
+            mavgi_update(i_t1_c1_unfilt, &moving_average_t1_c1[0]);
+            mavgi_update(q_t1_c1_unfilt, &moving_average_t1_c1[1]);
 
             #if 0
             equalizer_complex_t1_c1(&i_t1_c1, &q_t1_c1);
@@ -1340,8 +1320,8 @@ int main(int argc, char *argv[])
             // Low-Pass-Filtering before decimation is necessary, to ensure
             // that i and q signals don't contain frequencies above new sample
             // rate. Moving average can be viewed as a low pass filter.
-            i_s1 = moving_average_s1(i_s1_unfilt, 0);
-            q_s1 = moving_average_s1(q_s1_unfilt, 1);
+            mavgi_update(i_s1_unfilt, &moving_average_s1[0]);
+            mavgi_update(q_s1_unfilt, &moving_average_s1[1]);
 
             #if 0
             equalizer_complex_s1(&i_s1, &q_s1); // FIXME: Function does not exist.
@@ -1350,6 +1330,11 @@ int main(int argc, char *argv[])
             ++decimation_rate_index;
             if (decimation_rate_index < opts_decimation_rate) continue;
             decimation_rate_index = 0;
+
+            i_t1_c1 = mavgi(&moving_average_t1_c1[0]);
+            q_t1_c1 = mavgi(&moving_average_t1_c1[1]);
+            i_s1 = mavgi(&moving_average_s1[0]);
+            q_s1 = mavgi(&moving_average_s1[1]);
 
             process_t1_c1_chain(i_t1_c1, q_t1_c1, &t2_algo_t1_c1, &rl_algo_t1_c1, polar_discriminator_t1_c1_function);
             process_s1_chain(i_s1, q_s1, &t2_algo_s1, &rl_algo_s1, polar_discriminator_s1_function);
