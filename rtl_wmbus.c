@@ -96,7 +96,7 @@ static void sig_alarm_handler(int signo)
 
 static const uint32_t ACCESS_CODE_T1_C1 = 0x543d;
 static const uint32_t ACCESS_CODE_T1_C1_BITMASK = 0xFFFFu;
-static const unsigned ACCESS_CODE_T1_C1_ERRORS = 0u; // 0 if no errors allowed
+static const unsigned ACCESS_CODE_T1_C1_ERRORS = 1u; // 0 if no errors allowed
 
 static const uint32_t ACCESS_CODE_S1 = 0x547696;
 static const uint32_t ACCESS_CODE_S1_BITMASK = 0xFFFFFFu;
