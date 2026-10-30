@@ -755,7 +755,7 @@ static void runlength_algorithm_t1_c1(unsigned raw_bit, unsigned rssi, struct ru
                 bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
             }
 
-            t1_c1_packet_decoder(bit, rssi, &algo->decoder, "rla;");
+            t1_c1_packet_decoder(bit, 0.f, 0, rssi, &algo->decoder, "rla;");
         }
 
         #if 0
@@ -795,7 +795,7 @@ static void time2_algorithm_t1_c1_reset(struct time2_algorithm_t1_c1 *algo)
     reset_t1_c1_packet_decoder(&algo->t1_c1_decoder);
 }
 
-static void time2_algorithm_t1_c1(unsigned bit, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
+static void time2_algorithm_t1_c1(unsigned bit, float soft, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
 {
     algo->bitstream = (algo->bitstream << 1) | bit;
 
@@ -804,7 +804,7 @@ static void time2_algorithm_t1_c1(unsigned bit, unsigned rssi, struct time2_algo
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
     }
 
-    t1_c1_packet_decoder(bit, rssi, &algo->t1_c1_decoder, "t2a;");
+    t1_c1_packet_decoder(bit, soft, 1, rssi, &algo->t1_c1_decoder, "t2a;");
 }
 
 struct time2_algorithm_s1
@@ -839,6 +839,7 @@ static int opts_s1_t1_c1_simultaneously = 0;
 static int opts_accurate_atan = 1;
 static int opts_remove_dc_offset = 0;
 int opts_show_used_algorithm = 0;
+int opts_soft_3outof6 = 1;
 static int opts_t1_c1_processing_enabled = 1;
 static int opts_s1_processing_enabled = 1;
 static int opts_check_flow = 0;
@@ -855,6 +856,7 @@ static void print_usage(const char *program_name)
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
     fprintf(stdout, "\t-d 2 set decimation rate to 2 (defaults to 2 if omitted)\n");
+    fprintf(stdout, "\t-c 0|1 hard or soft decision 3-of-6 decoding for T1 (defaults to 1)\n");
     fprintf(stdout, "\t-v show used algorithm in the output\n");
     fprintf(stdout, "\t-V show version\n");
     fprintf(stdout, "\t-s receive S1 and T1/C1 datagrams simultaneously. rtl_sdr _MUST_ be set to 868.625MHz (-f 868.625M)\n");
@@ -873,7 +875,7 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "ofad:p:r:vVst:")) != -1)
+    while ((option = getopt(argc, argv, "ofac:d:p:r:vVst:")) != -1)
     {
         switch (option)
         {
@@ -928,6 +930,14 @@ static void process_options(int argc, char *argv[])
             break;
         case 'd':
             opts_decimation_rate = strtoul(optarg, NULL, 10);
+            break;
+        case 'c':
+            opts_soft_3outof6 = (int)strtol(optarg, NULL, 10);
+            if (opts_soft_3outof6 < 0 || opts_soft_3outof6 > 1)
+            {
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            }
             break;
         case 's':
             opts_s1_t1_c1_simultaneously = 1;
@@ -1083,7 +1093,7 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
             else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
             {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
                 clock_lock_t1_c1++;
-                time2_algorithm_t1_c1(bit_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
+                time2_algorithm_t1_c1(bit_t1_c1, delta_phi_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
                 //int16_t u = bit_t1_c1 ? (INT16_MAX-1) : 0;
                 //fwrite(&u, sizeof(u), 1, bits_out);
             }

@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <float.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -245,7 +246,16 @@ struct t1_c1_packet_decoder_work
     unsigned byte;
     __attribute__((__aligned__(16))) uint8_t packet[290]; // max. packet length with L- and all CRC-Fields
     char timestamp[64];
+
+    /* Everything below is not cleared by reset_t1_c1_packet_decoder(). */
+    float soft[6];                      // soft values of the last 6 chips, oldest first
+    unsigned has_soft;                  // soft values are valid
 };
+
+extern int opts_show_used_algorithm;
+
+/* 0: hard decision 3-of-6 decoding, 1: soft decision 3-of-6 decoding. */
+extern int opts_soft_3outof6;
 
 int get_mode_a_tlg_length(uint8_t lfield)
 {
@@ -265,8 +275,41 @@ static int in_rx_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
 
 static void reset_t1_c1_packet_decoder(struct t1_c1_packet_decoder_work *decoder)
 {
-    memset(decoder, 0, sizeof(*decoder));
+    memset(decoder, 0, offsetof(struct t1_c1_packet_decoder_work, soft));
     decoder->state = &t1_c1_decoder_states[0];
+}
+
+/* Maximum likelihood decoding of one 3-of-6 symbol: correlate the soft chip values with
+   all 16 valid code words and return the best nibble. */
+static unsigned t1_soft_decode_nibble(const float *soft)
+{
+    /* 6-chip 3-of-6 code word of each nibble; the inverse of HIGH_NIBBLE_3OUTOF6. */
+    static const uint8_t code_of_nibble[16] =
+    {
+        0x16, 0x0D, 0x0E, 0x0B, 0x1C, 0x19, 0x1A, 0x13,
+        0x2C, 0x25, 0x26, 0x23, 0x34, 0x31, 0x32, 0x29,
+    };
+
+    float best = -FLT_MAX;
+    unsigned best_nibble = 0;
+
+    for (unsigned n = 0;
+         n < sizeof(code_of_nibble) / sizeof(code_of_nibble[0]);
+         n++)
+    {
+        const unsigned code = code_of_nibble[n];
+        float score = 0.f;
+        for (unsigned k = 0; k < 6; k++)
+            score += ((code >> (5 - k)) & 1u) ? soft[k] : -soft[k];
+
+        if (score > best)
+        {
+            best = score;
+            best_nibble = n;
+        }
+    }
+
+    return best_nibble;
 }
 
 static void t1_c1_idle(unsigned bit, struct t1_c1_packet_decoder_work *decoder)
@@ -358,9 +401,13 @@ static void t1_rx_high_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_de
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
 
-    const unsigned byte = HIGH_NIBBLE_3OUTOF6[decoder->byte];
+    unsigned byte = HIGH_NIBBLE_3OUTOF6[decoder->byte];
 
-    if (byte == 0xFFu) decoder->err_3outof = 1;
+    if (opts_soft_3outof6 && decoder->has_soft)
+    {
+        byte = t1_soft_decode_nibble(decoder->soft) << 4;
+    }
+    else if (byte == 0xFFu) decoder->err_3outof = 1;
 
     decoder->packet[decoder->l] = byte;
 }
@@ -375,9 +422,13 @@ static void t1_rx_low_nibble_last_data_bit(unsigned bit, struct t1_c1_packet_dec
     decoder->byte <<= 1;
     decoder->byte |= (bit & PACKET_DATABIT_MASK);
 
-    const unsigned byte = LOW_NIBBLE_3OUTOF6[decoder->byte];
+    unsigned byte = LOW_NIBBLE_3OUTOF6[decoder->byte];
 
-    if (byte == 0xFFu) decoder->err_3outof = 1;
+    if (opts_soft_3outof6 && decoder->has_soft)
+    {
+        byte = t1_soft_decode_nibble(decoder->soft);
+    }
+    else if (byte == 0xFFu) decoder->err_3outof = 1;
 
     decoder->packet[decoder->l++] |= byte;
 
@@ -644,11 +695,12 @@ static inline uint32_t get_serial(const uint8_t *const packet)
     return serial;
 }
 
-extern int opts_show_used_algorithm;
-
-static void t1_c1_packet_decoder(unsigned bit, unsigned rssi, struct t1_c1_packet_decoder_work *decoder, const char *algorithm)
+static void t1_c1_packet_decoder(unsigned bit, float soft, int has_soft, unsigned rssi, struct t1_c1_packet_decoder_work *decoder, const char *algorithm)
 {
     decoder->current_rssi = rssi;
+    memmove(&decoder->soft[0], &decoder->soft[1], 5 * sizeof(decoder->soft[0]));
+    decoder->soft[5] = soft;
+    decoder->has_soft = (unsigned)has_soft;
 
     (*decoder->state++)(bit, decoder);
 
