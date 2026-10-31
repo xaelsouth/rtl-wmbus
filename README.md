@@ -133,15 +133,78 @@ Optimization on frequencies translation by rearranging compute steps implemented
 
 Alalons (have I thanked you already?!) proposed a speed optimized arctan function. Performance gain is notable (factor ~2) but could reduce sensitivity slightly. I have seen that on receiving C1 mode datagrams - that's why the speed optimized version is not in use by default. A speed optimized arctan version can be activated by "-a" in the program options.
 
-A new options "-o", which means "remove dc offset", was introduced. The overall sensitivity is better _without_ removing dc offset, so the user may try to start rtl_wmbus with this option if no datagrams comes:
- * cat samples/rtlsdr_868.950M_1M6_issue47.cu8 | build/rtl_wmbus -o
- * cat samples/rtlsdr_868.950M_1M6_issue49.cu8 | build/rtl_wmbus -o
- * cat samples/rtlsdr_868.625M_2M4_issue48.cu8 | build/rtl_wmbus -d 3 -s -o
+  Update 2026-Oct-31
+  ------------------
+Compile-time algorithm defaults are centralized in `rtlwmbus_settings.h`.
+Each setting is guarded by `#ifndef`, so compiler `-D` overrides remain supported.
+`ATAN2_APPROX_ENABLED=1` is the default and selects `atan2_approximation2()` for
+both polar discriminators. The runtime `-a` option still selects the separate
+imaginary-only discriminator and bypasses this setting. The atan approximation is
+now enabled by default!
+
+The T1/C1 and S1 post-demodulation FIR filters use mirrored history buffers.
+This replaces two variable-length dot-product loops at each ring wrap with one
+contiguous loop, allowing compiler vectorization without changing coefficient
+order, floating-point accumulation order, or receiver settings. This however,
+requires additional storage. Other FIR users, including adaptive filters,
+retain their original history layout.
+
+Optional SIMD FIR uses unaligned loads, reverses each four-sample history group,
+and handles remaining taps with a scalar tail. It requires no extra history
+storage. The backend is selected at compile time:
+* `__SSE__` selects SSE, otherwise
+* `__ARM_NEON` selects NEON, otherwise
+* the implementation is scalar.
+
+SSE is baseline on x86-64; NEON is available on standard ARM64 Linux targets.
+`FIR_SIMD=1` is enabled by default; use `-DFIR_SIMD=0` to disable it.
+No global fast-math flags are required. SIMD uses four partial sums, so its
+output is not bitwise identical to the scalar FIR. The NEON implementation
+reverses each four-sample history group and uses the same four-accumulator
+reduction order as SSE. SIMD FIR and transposed IIR remain opt-in.
+
+The pre-decimation moving averages update integer sums and history for every
+input sample, but convert to float and normalize only for retained samples.
+The 8/16-sample windows and float-to-integer input truncation are unchanged.
+
+The clock-recovery filters retain their original direct-form II realization by
+default. An alternative transposed direct-form II implementation uses two delay
+values per biquad and a different feedback schedule. It is not bitwise equivalent:
+floating-point rounding can change clock zero crossings on untested signals.
+
+DC offset removal is enabled by default and can be switched off with "--no-dc-offset".
+For T1/C1 the offset is measured over the 16 symbols of the sync word (0x543D, balanced: 8 ones,
+8 zeros) when it is detected and subtracted from the rest of the packet (time2 algorithm only;
+the run length algorithm is unchanged). This replaces the former "-o" option, a continuously
+running one-pole high-pass filter, which cost packets on most recordings. S1 uses the
+same method over its 24 symbol sync word (0x547696, also balanced).
+
+**Soft decision 3 out of 6 decoding (T1), `-c 0|1`.** The post-filter discriminator value of
+each chip is kept and every data nibble is decoded by correlating its 6 chips with the 16 valid
+3 out of 6 code words, instead of slicing each chip to a bit first. The L field is still
+decoded hard because it is needed to tell T1 from C1. The run length algorithm stays hard.
+Enabled by default; `-c 0` selects the old hard decision. With soft decoding a chip pattern
+that is not a valid code word is mapped to the nearest code word, so the 3OUTOF6OK column is
+always 1 for those symbols.
+
+**Gaussian matched filter has not been kept.** Replacing the Butterworth post-filter by a
+Gaussian FIR (BT 0.3 to 1.0) was worse at every BT. The best was BT 0.7 to 0.8 for the existing
+filter.
+
+**DC offset removal, `--no-dc-offset` to disable.** The former `-o` (one-pole high-pass, alpha 0.999,
+about 1.25 ms time constant) tracked noise between packets and its step response was still decaying
+during the sync word and the first part of the payload. It is replaced by an estimate from the last
+16 sampling instants (the mean of the discriminator values), which is held from the moment the sync
+word is detected until the packet ends.
+
+The same is done for S1 (24 symbols). S1's run length algorithm still gets the old continuous high-pass,
+because without it the only S1 recording (2 packets) loses one; the T1/C1 run length algorithm gets none.
+Both are controlled by the same switch.
 
   License
   -------
 
-Copyright (c) 2024 <xael.south@yandex.com>
+Copyright (c) 2015-2026 <xael.south@yandex.com>
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
 are met:
