@@ -79,10 +79,6 @@ static void sig_alarm_handler(int signo)
 }
 #endif
 
-#ifndef T1_C1_DC_OFFSET_ALPHA
-#define T1_C1_DC_OFFSET_ALPHA 0.999f
-#endif
-
 #ifndef S1_DC_OFFSET_ALPHA
 #define S1_DC_OFFSET_ALPHA 0.999f
 #endif
@@ -488,15 +484,6 @@ static float s1_remove_dc_offset_demod(float x)
   return y_old;
 }
 
-static float t1_c1_remove_dc_offset_demod(float x)
-{
-  static float x_old, y_old;
-
-  y_old = (1.f + T1_C1_DC_OFFSET_ALPHA)/2.f * (x - x_old) + T1_C1_DC_OFFSET_ALPHA * y_old;
-  x_old = x;
-
-  return y_old;
-}
 
 static inline float polar_discriminator_t1_c1(float i, float q)
 {
@@ -795,16 +782,20 @@ static void time2_algorithm_t1_c1_reset(struct time2_algorithm_t1_c1 *algo)
     reset_t1_c1_packet_decoder(&algo->t1_c1_decoder);
 }
 
-static void time2_algorithm_t1_c1(unsigned bit, float soft, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
+// Returns 1 if the access code was detected with this bit.
+static int time2_algorithm_t1_c1(unsigned bit, float soft, unsigned rssi, struct time2_algorithm_t1_c1 *algo)
 {
+    int detected = 0;
     algo->bitstream = (algo->bitstream << 1) | bit;
 
     if (count_set_bits((algo->bitstream & ACCESS_CODE_T1_C1_BITMASK) ^ ACCESS_CODE_T1_C1) <= ACCESS_CODE_T1_C1_ERRORS)
     {
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+        detected = 1;
     }
 
     t1_c1_packet_decoder(bit, soft, 1, rssi, &algo->t1_c1_decoder, "t2a;");
+    return detected;
 }
 
 struct time2_algorithm_s1
@@ -819,16 +810,20 @@ static void time2_algorithm_s1_reset(struct time2_algorithm_s1 *algo)
     reset_s1_packet_decoder(&algo->s1_decoder);
 }
 
-static void time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorithm_s1 *algo)
+// Returns 1 if the access code was detected with this bit.
+static int time2_algorithm_s1(unsigned bit, unsigned rssi, struct time2_algorithm_s1 *algo)
 {
+    int detected = 0;
     algo->bitstream = (algo->bitstream << 1) | bit;
 
     if (count_set_bits((algo->bitstream & ACCESS_CODE_S1_BITMASK) ^ ACCESS_CODE_S1) <= ACCESS_CODE_S1_ERRORS)
     {
         bit |= (1u<<PACKET_PREAMBLE_DETECTED_SHIFT); // packet detected; mark the bit similar to "Access Code"-Block in GNU Radio
+        detected = 1;
     }
 
     s1_packet_decoder(bit, rssi, &algo->s1_decoder, "t2a;");
+    return detected;
 }
 
 
@@ -837,7 +832,9 @@ static int opts_time2_algorithm_enabled = TIME2_ALGORITHM_ENABLED;
 static unsigned opts_decimation_rate = 2u;
 static int opts_s1_t1_c1_simultaneously = 0;
 static int opts_accurate_atan = 1;
-static int opts_remove_dc_offset = 0;
+// T1/C1: the DC offset is the mean of the last 16 symbols (the sync word is balanced); it is held for the payload once the sync word is found.
+// S1: one-pole high-pass filter.
+static int opts_remove_dc_offset = 1;
 int opts_show_used_algorithm = 0;
 int opts_soft_3outof6 = 1;
 static int opts_t1_c1_processing_enabled = 1;
@@ -851,7 +848,7 @@ static void print_usage(const char *program_name)
 {
     fprintf(stdout, "rtl_wmbus: " VERSION "\n\n");
     fprintf(stdout, "Usage %s:\n", program_name);
-    fprintf(stdout, "\t-o remove DC offset\n");
+    fprintf(stdout, "\t--no-dc-offset disable DC offset removal (enabled by default)\n");
     fprintf(stdout, "\t-a accelerate (use an inaccurate atan version)\n");
     fprintf(stdout, "\t-r 0 to disable run length algorithm\n");
     fprintf(stdout, "\t-t 0 to disable time2 algorithm\n");
@@ -875,12 +872,14 @@ static void process_options(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "ofac:d:p:r:vVst:")) != -1)
+    static const struct option long_options[] = {{"no-dc-offset", no_argument, NULL, 'n'}, {NULL, 0, NULL, 0}};
+
+    while ((option = getopt_long(argc, argv, "fac:d:p:r:vVst:", long_options, NULL)) != -1)
     {
         switch (option)
         {
-        case 'o':
-          opts_remove_dc_offset = 1;
+        case 'n':
+          opts_remove_dc_offset = 0;
           break;
         case 'f':
             opts_check_flow = 1;
@@ -1032,6 +1031,10 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
 {
     static int16_t old_clock_t1_c1 = INT16_MIN;
     static unsigned clock_lock_t1_c1 = 0;
+    static float sync_ring[16];
+    static unsigned sync_ring_pos = 0;
+    static float packet_dc = 0.f;
+    static int packet_dc_active = 0;
 
     // Demodulate.
     const float _delta_phi_t1_c1 = polar_discriminator_t1_c1_function(i_t1_c1, q_t1_c1);
@@ -1041,7 +1044,6 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_t1_c1 = lp_fir_butter_800kHz_100kHz_160kHz(_delta_phi_t1_c1);
     //float delta_phi_t1_c1 = equalizer_t1_c1(_delta_phi_t1_c1, _delta_phi_t1_c1 >= 0.f ? 1.f : -1.f);
-    if (opts_remove_dc_offset) delta_phi_t1_c1 = t1_c1_remove_dc_offset_demod(delta_phi_t1_c1);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_t1_c1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_t1_c1);
 
@@ -1093,7 +1095,27 @@ void t1_c1_signal_chain(float i_t1_c1, float q_t1_c1,
             else if (clock_lock_t1_c1 == opts_CLOCK_LOCK_THRESHOLD_T1_C1)
             {   // Sample data bit at CLOCK_LOCK_THRESHOLD_T1_C1 clock bit position.
                 clock_lock_t1_c1++;
-                time2_algorithm_t1_c1(bit_t1_c1, delta_phi_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
+                if (opts_remove_dc_offset)
+                {
+                    if (packet_dc_active && !in_rx_t1_c1_packet_decoder(&t2_algo_t1_c1->t1_c1_decoder)) packet_dc_active = 0;
+                    sync_ring[sync_ring_pos] = delta_phi_t1_c1;
+                    sync_ring_pos = (sync_ring_pos + 1u) % 16u;
+                    float mean = 0.f;
+                    for (unsigned k = 0; k < 16u; k++) mean += sync_ring[k];
+                    mean /= 16.f;
+                    // Until the sync word is found the offset follows the mean of the last 16 symbols.
+                    const float z = delta_phi_t1_c1 - (packet_dc_active ? packet_dc : mean);
+                    const unsigned bit = (z >= 0.f) ? (1u<<PACKET_DATABIT_SHIFT) : 0u;
+                    if (time2_algorithm_t1_c1(bit, z, rssi_t1_c1, t2_algo_t1_c1) && !packet_dc_active)
+                    {
+                        packet_dc = mean;
+                        packet_dc_active = 1;
+                    }
+                }
+                else
+                {
+                    time2_algorithm_t1_c1(bit_t1_c1, delta_phi_t1_c1, rssi_t1_c1, t2_algo_t1_c1);
+                }
                 //int16_t u = bit_t1_c1 ? (INT16_MAX-1) : 0;
                 //fwrite(&u, sizeof(u), 1, bits_out);
             }
@@ -1124,6 +1146,10 @@ void s1_signal_chain(float i_s1, float q_s1,
 {
     static int16_t old_clock_s1 = INT16_MIN;
     static unsigned clock_lock_s1 = 0;
+    static float sync_ring_s1[24];
+    static unsigned sync_ring_pos_s1 = 0;
+    static float packet_dc_s1 = 0.f;
+    static int packet_dc_active_s1 = 0;
 
     // Demodulate.
     const float _delta_phi_s1 = polar_discriminator_s1_function(i_s1, q_s1);
@@ -1133,7 +1159,6 @@ void s1_signal_chain(float i_s1, float q_s1,
     // Post-filtering to prevent bit errors because of signal jitter.
     float delta_phi_s1 = lp_fir_butter_800kHz_32kHz_36kHz(_delta_phi_s1);
     //float delta_phi_s1 = equalizer_s1(_delta_phi_s1, _delta_phi_s1 >= 0.f ? 1.f : -1.f);
-    if (opts_remove_dc_offset) delta_phi_s1 = s1_remove_dc_offset_demod(delta_phi_s1);
     //int16_t demodulated_signal = (INT16_MAX-1)*delta_phi_s1;
     //fwrite(&demodulated_signal, sizeof(demodulated_signal), 1, demod_out2_s1);
 
@@ -1153,7 +1178,9 @@ void s1_signal_chain(float i_s1, float q_s1,
     #if RUN_LENGTH_ALGORITHM_ENABLED
     if (opts_run_length_algorithm_enabled)
     {
-        runlength_algorithm_s1(bit_s1, rssi_s1, rl_algo_s1);
+        // The run length algorithm gets the continuous high-pass; it has no sync word to estimate the offset from.
+        const float rl_phi_s1 = opts_remove_dc_offset ? s1_remove_dc_offset_demod(delta_phi_s1) : delta_phi_s1;
+        runlength_algorithm_s1((rl_phi_s1 >= 0) ? (1u<<PACKET_DATABIT_SHIFT) : 0u, rssi_s1, rl_algo_s1);
     }
     #endif
     // --- runlength algorithm section end ---
@@ -1185,7 +1212,27 @@ void s1_signal_chain(float i_s1, float q_s1,
             else if (clock_lock_s1 == opts_CLOCK_LOCK_THRESHOLD_S1)
             {   // Sample data bit at CLOCK_LOCK_THRESHOLD_S1 clock bit position.
                 clock_lock_s1++;
-                time2_algorithm_s1(bit_s1, rssi_s1, t2_algo_s1);
+                if (opts_remove_dc_offset)
+                {
+                    if (packet_dc_active_s1 && !in_rx_s1_packet_decoder(&t2_algo_s1->s1_decoder)) packet_dc_active_s1 = 0;
+                    sync_ring_s1[sync_ring_pos_s1] = delta_phi_s1;
+                    sync_ring_pos_s1 = (sync_ring_pos_s1 + 1u) % 24u;
+                    float mean = 0.f;
+                    for (unsigned k = 0; k < 24u; k++) mean += sync_ring_s1[k];
+                    mean /= 24.f;
+                    // Same as for T1/C1; the S1 sync word is balanced over 24 symbols.
+                    const float z = delta_phi_s1 - (packet_dc_active_s1 ? packet_dc_s1 : mean);
+                    const unsigned bit = (z >= 0.f) ? (1u<<PACKET_DATABIT_SHIFT) : 0u;
+                    if (time2_algorithm_s1(bit, rssi_s1, t2_algo_s1) && !packet_dc_active_s1)
+                    {
+                        packet_dc_s1 = mean;
+                        packet_dc_active_s1 = 1;
+                    }
+                }
+                else
+                {
+                    time2_algorithm_s1(bit_s1, rssi_s1, t2_algo_s1);
+                }
                 //int16_t u = bit ? (INT16_MAX-1) : 0;
                 //fwrite(&u, sizeof(u), 1, bits_out);
             }
