@@ -201,6 +201,23 @@ The same is done for S1 (24 symbols). S1's run length algorithm still gets the o
 because without it the only S1 recording (2 packets) loses one; the T1/C1 run length algorithm gets none.
 Both are controlled by the same switch.
 
+  Update 2026-Nov-11
+  ------------------
+
+[mbusdec](https://github.com/xaelsouth/mbusdec) can decode rtl-wmbus
+telegrams into newline-delimited JSON. Pipe the receiver output into it, for
+example:
+
+```sh
+rtl_sdr -f 868.95M -s 1600000 - 2>/dev/null | build/rtl_wmbus | /path/to/mbusdec
+```
+
+mbusdec accepts the CRC-stripped stream directly and reports receiver CRC
+failures and unsupported telegrams as JSON errors. It can optionally select
+meters with `--filter filter.json` and use keys from `--keys keys.json` for
+supported encrypted telegrams. See the [mbusdec README](https://github.com/xaelsouth/mbusdec)
+for installation, key and filter formats, and decoding limitations.
+
   License
   -------
 
